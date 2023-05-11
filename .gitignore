@@ -1,0 +1,21 @@
+# Dist directory
+dist/
+dist-newstyle/
+
+# Cabal sandbox directory
+.cabal-sandbox/
+cabal.sandbox.config
+
+# Stack's working directory
+.stack-work/
+
+# Other
+*.o
+*.hi
+*.swp
+*.dyn_o
+*.dyn_hi
+
+# IDE/Editor directories
+.vscode/
+.idea/
