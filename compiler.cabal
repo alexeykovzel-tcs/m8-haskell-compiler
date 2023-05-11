@@ -1,0 +1,37 @@
+cabal-version: 3.0
+
+name: compiler
+version: 0.1.0.0
+synopsis: Compiler for a simple language.
+description: 
+  This project is a compiler for a simple programming language designed 
+  for educational purposes, and may not be suitable for production use. 
+  While the language it compiles is simple, it covers fundamental 
+  concepts such as variables, control structures, and functions.
+
+build-type: Simple
+
+extra-source-files: README.md
+
+source-repository head
+    type: git
+    location: https://github.com/yourusername/compiler
+
+executable compiler
+    main-is: Main.hs
+    hs-source-dirs: app
+
+    -- If your application uses other modules, list them here:
+    -- other-modules:
+    --   MyModule1
+    --   MyModule2
+
+    -- If your application uses other extensions, list them here:
+    -- other-extensions: OverloadedStrings
+
+    build-depends:  base >=4.10.1.0 && <5,
+                    text >=1.2.4.0 && <1.3,
+                    eventloop >=0.8.2.8
+                    hood >= 0.3 && < 0.4
+
+    default-language: Haskell2010
