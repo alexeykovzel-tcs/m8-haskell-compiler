@@ -26,7 +26,7 @@ executable compiler
 
     other-modules:
       Parser
-      Syntax
+      Lexer
       Test.Evaluator
 
     build-depends:  

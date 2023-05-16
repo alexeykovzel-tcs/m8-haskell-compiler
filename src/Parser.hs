@@ -1,62 +1,94 @@
 module Parser where
 
 import Text.ParserCombinators.Parsec
-import Syntax
+import Lexer
 
--- Parsing conditions
+type Script = [Statement]
 
-parseExpr :: Parser Expr
-parseExpr = 
-    parseDec 
-    <|> parseIf
-    <|> ((\a b -> foldl Add a b) 
-        <$> parseTerm 
-        <*> (many $ symbol "+" *> parseTerm))
-    <?> "expression"
+type ArgsDef = [(String, DataType)]
+
+data DataType 
+    = String 
+    | Bool 
+    | Int 
+    | Array 
+    | Struct
+    deriving Show
+
+data Value = 
+    StrVal String 
+    | BoolVal Bool 
+    | IntVal Integer
+    deriving Show
+
+data Operator
+    = And | Or
+    | Eq | EqOrMore | EqOrLess | More | Less
+    | Add | Sub | Mult | Div | Mod
+    deriving Show
+
+data Range
+    = FromTo        Integer Integer
+    | OfArray       [Value]
+    deriving Show
+
+data Statement
+    = VarInit       String DataType Expr
+    | VarDecl       String DataType
+    | VarAssign     String Expr
+    | ArrUpdate     String Integer Expr
+    | FunDef        String ArgsDef DataType Script Expr
+    | LoopFor       Range Script
+    | LoopWhile     Expr Script
+    | CondIf        Expr Script
+    | CondIfElse    Expr Script Script
+    | StructDef     String ArgsDef
+    | Exec          Expr
+    deriving Show
+
+data Expr
+    = Const         Value
+    | Var           Value
+    | Calc          Operator Expr Expr
+    | FunCall       String Expr
+    | StructInit    String [Value]
+    | Ternary       Expr Expr Expr
+    | Lambda        ArgsDef Script
+    deriving Show
 
 
-parseFactor :: Parser Expr
-parseFactor = 
-    (Const <$> num) 
-    <|> (parens parseExpr)
-    <|> try (FunCall 
-            <$> identifier 
-            <*> (parens parseExpr)) 
-    <|> (Var <$> identifier) 
-    <?> "id or number"
+-- parseProgram :: Parser Script
+-- parseProgram = ...
 
+-- parseScript :: Parser Script
+-- parseScript = ...
 
-parseTerm :: Parser Expr
-parseTerm = 
-    (\a b -> foldl Mult a b) 
-    <$> parseFactor 
-        <*> (many $ symbol "*" *> parseFactor)
-    <?> "term (e.g. 2*3*5)"
+-- parseFun :: Parser Expr
+-- parseFun = ...
 
+-- parseArgsDef :: Parser ArgsDef
+-- parseArgsDef = ...
 
--- Parsing conditions
+-- parseArgs :: Parser [Expr]
+-- parseArgs = ...
 
-parseCond :: Parser Cond
-parseCond = Eq 
-    <$> parseExpr <*> (string "==" *> parseExpr)
-    <?> "condition"
+-- parseExpr :: Parser Expr
+-- parseExpr = ...
 
-parseDec :: Parser Expr
-parseDec = Dec 
-    <$> (symbol "dec" *> parseExpr)
-    <?> "dec (wtf is it)"
+-- parseOp :: Parser Op
+-- parseOp = ...
 
-parseIf :: Parser Expr
-parseIf = If 
-    <$> (symbol "if" *> parseCond) 
-        <*> (symbol "then" *> parseExpr) 
-        <*> (symbol "else" *> parseExpr)
+-- parseBool :: Parser Expr
+-- parseBool = ...
 
+-- parseString :: Parser Expr
+-- parseString = ...
 
--- Parsing functions
+-- parseArray :: Parser [Expr]
+-- parseArray = ...
 
-parseFun :: Parser FunDef
-parseFun = Function 
-    <$> (symbol "function" *> identifier)
-        <*> identifier
-        <*> (symbol "=" *> parseExpr)
+-- parseElse :: Parser ...
+-- parseElse = ...
+
+-- parseRange :: Parser Range
+-- parseRange = ...
