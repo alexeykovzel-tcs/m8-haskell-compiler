@@ -11,7 +11,11 @@ languageDef = emptyDef {
         "+", "-", "*", "/", "%"
     ],
     Token.reservedNames   = [ 
-        "let", "for", "while", "if", "struct", "fun"
+        "let", "struct", "fun",
+        "for", "while", "if",
+        "false", "true",
+        "Int", "String", "Bool",
+        "return"
     ],
     Token.commentStart    = "/*",
     Token.commentEnd      = "*/",
@@ -22,11 +26,11 @@ languageDef = emptyDef {
 
 lexer = Token.makeTokenParser languageDef
 
-identifier :: Parser String
-identifier = Token.identifier lexer
+name :: Parser String
+name = Token.identifier lexer
 
-integer :: Parser Integer
-integer = Token.integer lexer
+int :: Parser Integer
+int = Token.integer lexer
 
 parens :: Parser a -> Parser a
 parens = Token.parens lexer
@@ -36,3 +40,6 @@ symbol = Token.symbol lexer
 
 reserved :: String -> Parser ()
 reserved = Token.reserved lexer
+
+reservedOp :: String -> Parser ()
+reservedOp = Token.reservedOp lexer

@@ -2,7 +2,6 @@ module Test.Evaluator where
 
 import Text.ParserCombinators.Parsec
 import Data.Either
-import Parser
 
 fromLeft' :: Either l r -> l
 fromLeft' (Left x) = x -- Newer GHC versions contain a fromLeft :: l -> Either l r -> l
