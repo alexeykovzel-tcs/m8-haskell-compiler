@@ -1,12 +1,13 @@
-## TODO
+## Parser
 
 - [ ] Parse array types
 - [ ] Get rid of "try" (backtracking)
 - [ ] Support underscore in names
-- [ ] Write documentation for parser
+- [ ] Write documentation for Parser.hs
+- [ ] Write more tests for Parser.hs
 
 
-## Testing
+### Testing
 
 To parser test manually, run:
 
