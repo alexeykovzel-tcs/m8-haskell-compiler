@@ -1,24 +1,15 @@
 module Main where
 
-import Test.Evaluator
+import Text.ParserCombinators.Parsec
+import Data.Either
 import Parser
 
 
-main :: IO ()
-main = do
-    putStrLn "Hello World!"
+main :: IO()
+main = return() 
 
 
-example1 =
-    "       while num >= 0 {            " ++
-    "           temp = a;               " ++
-    "           a = a + b;              " ++
-    "           b = temp;               " ++
-    "           num = num - 1;          " ++
-    "       }                           "
-
-
-example2 =
+example =
     "   fun fib(num: Int) -> Int {      " ++
     "       let a: Int = 1;             " ++
     "       let b: Int = 0;             " ++

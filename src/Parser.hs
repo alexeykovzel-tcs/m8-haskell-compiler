@@ -5,16 +5,22 @@ import Text.Parsec.Char
 import Data.Maybe
 import Lexer
 
-
 {-
-    TODO: Write documentation...
+    -- Usage examples --
+
+    parser statement    "let x: Int = 2 + 1";
+    parser statement    "for i: Int in [1, 2, 3] { print(i); }"
+    parser expr         "2 * (3 + 4) / 6"
 -}
+
+parser :: Parser a -> String -> a
+parser p xs = either (error . show) id result
+  where result = parse p "" xs
 
 
 {------------------------}
 {-        @SCRIPT       -}
 {------------------------}
-
 
 type Script = [Statement]
 
@@ -37,26 +43,22 @@ data LoopIter
     | IterVar       String
     deriving Show
 
-
 script :: Parser Script
 script = whiteSpace *> many statement
 
-
 statement :: Parser Statement
 statement 
-    =   declareVar
-    <|> try assignVar
-    <|> try insertArray
-    <|> defFunction
-    <|> defStruct
-    <|> loopFor
-    <|> loopWhile
-    <|> condition
-    <|> returnValue
-    <|> action
+    =   declareVar          -- e.g. let x: Int;
+    <|> try assignVar       -- e.g. x = 3 + y;
+    <|> try insertArray     -- e.g. arr[2] = x + 3;
+    <|> defFunction         -- e.g. fun increment(x: Int) { ... }
+    <|> defStruct           -- e.g. for x: Int in 2..10 { ... }
+    <|> loopFor             -- e.g. while x < 3 { print(x); }
+    <|> loopWhile           -- e.g. if x < y { ... } else { ... }
+    <|> condition           -- e.g. struct Person { first_name: String }
+    <|> returnValue         -- e.g. return x;
+    <|> action              -- e.g. print(x);
 
-
--- e.g. let x: Int;
 declareVar :: Parser Statement
 declareVar = DeclareVar
     <$  reserved "let" <*> varDef
@@ -65,16 +67,12 @@ declareVar = DeclareVar
         <|> pure Nothing)
     <*  semi
 
-
--- e.g. x = 3 + y;
 assignVar :: Parser Statement
 assignVar = AssignVar 
     <$> name
     <*  symbol "=" <*> expr 
     <*  semi
 
-
--- e.g. arr[2] = x + 3;
 insertArray :: Parser Statement
 insertArray = InsertArray 
     <$> name
@@ -82,38 +80,36 @@ insertArray = InsertArray
     <*  symbol "=" <*> expr 
     <*  semi
 
-
--- e.g. fun increment(x: Int) { return x + 1; }
 defFunction :: Parser Statement
 defFunction = DefFunction
     <$  reserved "fun" <*> name 
-    <*> parens argsDef <* symbol "->" <*> dataType 
+    <*> parens argsDef 
+    <* symbol "->" <*> dataType 
     <*> braces script
 
-
--- e.g. for x: Int in 2..10 { print(x); }
 loopFor :: Parser Statement
 loopFor = LoopFor 
     <$  reserved "for" <*> varDef
     <*  symbol "in" <*> loopIter
     <*> braces script
 
-
 loopIter :: Parser LoopIter
 loopIter
-    =   IterRange   <$> intValue <* symbol ".." <*> intValue
+    =   iterRange
     <|> IterArray   <$> array
     <|> IterVar     <$> name
 
+iterRange :: Parser LoopIter
+iterRange = IterRange   
+    <$> intValue 
+    <* symbol ".." 
+    <*> intValue
 
--- e.g. while x < 3 { print(x); }
 loopWhile :: Parser Statement
 loopWhile = LoopWhile 
     <$  reserved "while" <*> expr 
     <*> braces script
 
-
--- e.g. if x < y { print(x); } else { print(y); }
 condition :: Parser Statement
 condition = Condition 
     <$  reserved "if" <*> expr 
@@ -122,22 +118,16 @@ condition = Condition
         <$> (reserved "else" *> braces script)
         <|> pure Nothing)
 
-
--- e.g. struct Person { first_name: String }
 defStruct :: Parser Statement
 defStruct = DefStruct 
     <$  reserved "struct" <*> name 
     <*> braces argsDef
 
-
--- e.g. return x;
 returnValue :: Parser Statement
 returnValue = ReturnValue
     <$  reserved "return" <*> expr
     <*  semi
 
-
--- e.g. print(x);
 action :: Parser Statement
 action = Action 
     <$> expr 
@@ -147,7 +137,6 @@ action = Action
 {------------------------}
 {-     @EXPRESSIONS     -}
 {------------------------}
-
 
 data Expr
     = CallFunction      String [Expr]
@@ -170,25 +159,20 @@ data Expr
     | Fixed             Value
     deriving Show
 
-
 expr :: Parser Expr
 expr = try ternaryOp <|> operation
 
-
--- e.g. (x % 2 == 0) ? true : false
 ternaryOp :: Parser Expr
 ternaryOp = TernaryOp 
     <$> operation 
     <*  symbol "?" <*> operation 
     <*  symbol ":" <*> operation
 
-
 operation :: Parser Expr
 operation = logicand `chainl1` op
     where op 
             =   (Both           <$ reservedOp "&&") 
             <|> (OneOf          <$ reservedOp "||")
-
 
 -- logicand && logicand || logicand 
 logicand :: Parser Expr
@@ -200,14 +184,12 @@ logicand = comparand `chainl1` op
             <|> (IfMore         <$ reservedOp ">")
             <|> (IfLess         <$ reservedOp "<")
 
-
 -- comparand == comparand 
 comparand :: Parser Expr
 comparand = term `chainl1` op
     where op 
             =   (Add            <$ reservedOp "+")
             <|> (Substract      <$ reservedOp "-")
-
 
 -- term + term - term
 term :: Parser Expr
@@ -217,33 +199,26 @@ term = factor `chainl1` op
             <|> (Divide         <$ reservedOp "/")
             <|> (Modulo         <$ reservedOp "%")
 
-
 -- factor * factor / factor
 factor :: Parser Expr
 factor 
     =   Fixed <$> value
-    <|> try lambda
-    <|> parens expr
-    <|> try callFunction
-    <|> try declareStruct
+    <|> try lambda              -- e.g. (x: Int) -> { ... }
+    <|> parens expr             -- e.g. (2 + 3)
+    <|> try callFunction        -- e.g. print("Hello")
+    <|> try declareStruct       -- e.g. Person { "John" }
     <|> Variable <$> name
 
-
--- e.g. (x: Int) -> { x = x + 1; }
 lambda :: Parser Expr
 lambda = Lambda 
     <$> parens argsDef 
     <*  symbol "->" 
     <*> braces script
 
-
--- e.g. print("Hello")
 callFunction :: Parser Expr
 callFunction = CallFunction 
     <$> name <*> parens args
 
-
--- e.g. Person { "John", "Smith" }
 declareStruct :: Parser Expr
 declareStruct = DeclareStruct 
     <$> name 
@@ -254,15 +229,11 @@ declareStruct = DeclareStruct
 {-         @ARGS        -}
 {------------------------}
 
-
 type ArgsDef = [VarDef]
 
--- x: Int, y: Int
 argsDef :: Parser ArgsDef
 argsDef = varDef `sepBy` comma
 
-
--- 2 + 3, 5, "Hello" 
 args :: Parser [Expr]
 args = expr `sepBy` comma
 
@@ -270,7 +241,6 @@ args = expr `sepBy` comma
 {------------------------}
 {-        @VALUES       -}
 {------------------------}
-
 
 data VarDef 
     = VarDef String DataType
@@ -282,7 +252,7 @@ data Value
     | Int           Integer
     | Array         [Value]
     | None
-    deriving Show
+    deriving (Show, Eq)
 
 data DataType
     = StrType
@@ -292,7 +262,6 @@ data DataType
     | StructType
     deriving Show
 
-
 dataType :: Parser DataType
 dataType 
     =   StrType     <$ reserved "String"
@@ -300,12 +269,10 @@ dataType
     <|> IntType     <$ reserved "Int"
     <|> StructType  <$ name
 
-
 varDef :: Parser VarDef
 varDef = VarDef 
     <$> name <* colon
     <*> dataType
-
 
 value :: Parser Value
 value 
@@ -315,22 +282,16 @@ value
     <|> Bool        <$> boolValue
     <|> None        <$  symbol "None"
 
-
--- e.g. "Hello World"
 strValue :: Parser String
 strValue = between (char '"') (char '"') (many strChar)
     where 
         strChar = escapeChar <|> noneOf "\"\\"
         escapeChar = char '\\' *> oneOf "\"\\"
 
+array :: Parser [Value]
+array = brackets $ value `sepBy` comma
 
--- true or false
 boolValue :: Parser Bool
 boolValue
     =   False       <$ reserved "false"
     <|> True        <$ reserved "true"
-
-
--- e.g. [1, 2, 3]
-array :: Parser [Value]
-array = brackets $ value `sepBy` comma
