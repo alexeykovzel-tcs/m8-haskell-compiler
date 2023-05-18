@@ -3,7 +3,7 @@
 To test parser manually, run:
 
 ```bash
-ghci src/Main.hs -i/src
+ghci -i:src src/Main.hs
 ```
 
 Then, use can try the following:
