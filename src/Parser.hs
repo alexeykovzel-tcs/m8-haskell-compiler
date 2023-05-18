@@ -2,7 +2,6 @@ module Parser where
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
-import Test.Evaluator
 import Data.Maybe
 import Lexer
 
@@ -40,7 +39,7 @@ data LoopIter
 
 
 script :: Parser Script
-script = many statement <?> "script"
+script = whiteSpace *> many statement
 
 
 statement :: Parser Statement
@@ -64,7 +63,7 @@ declareVar = DeclareVar
     <*> (Just 
         <$> (symbol "=" *> expr ) 
         <|> pure Nothing)
-    <*  symbol ";"
+    <*  semi
 
 
 -- e.g. x = 3 + y;
@@ -72,7 +71,7 @@ assignVar :: Parser Statement
 assignVar = AssignVar 
     <$> name
     <*  symbol "=" <*> expr 
-    <*  symbol ";"
+    <*  semi
 
 
 -- e.g. arr[2] = x + 3;
@@ -81,7 +80,7 @@ insertArray = InsertArray
     <$> name
     <*> brackets intValue 
     <*  symbol "=" <*> expr 
-    <*  symbol ";"
+    <*  semi
 
 
 -- e.g. fun increment(x: Int) { return x + 1; }
@@ -135,15 +134,14 @@ defStruct = DefStruct
 returnValue :: Parser Statement
 returnValue = ReturnValue
     <$  reserved "return" <*> expr
-    <*  symbol ";"
+    <*  semi
 
 
 -- e.g. print(x);
 action :: Parser Statement
 action = Action 
     <$> expr 
-    <*  symbol ";"
-
+    <*  semi
 
 
 {------------------------}
@@ -252,7 +250,6 @@ declareStruct = DeclareStruct
     <*> braces args
 
 
-
 {------------------------}
 {-         @ARGS        -}
 {------------------------}
@@ -262,13 +259,12 @@ type ArgsDef = [VarDef]
 
 -- x: Int, y: Int
 argsDef :: Parser ArgsDef
-argsDef = varDef `sepBy` (symbol ",")
+argsDef = varDef `sepBy` comma
 
 
 -- 2 + 3, 5, "Hello" 
 args :: Parser [Expr]
-args = expr `sepBy` (symbol ",")
-
+args = expr `sepBy` comma
 
 
 {------------------------}
@@ -307,7 +303,7 @@ dataType
 
 varDef :: Parser VarDef
 varDef = VarDef 
-    <$> name <* symbol ":" 
+    <$> name <* colon
     <*> dataType
 
 
@@ -337,20 +333,4 @@ boolValue
 
 -- e.g. [1, 2, 3]
 array :: Parser [Value]
-array = brackets $ value `sepBy` (symbol ",")
-
-
-
-{------------------------}
-{-        @UTILS        -}
-{------------------------}
-
-
--- Parse: { something here }
-braces :: Parser a -> Parser a 
-braces p = between (symbol "{") (symbol "}") p
-
-
--- Parse: [ something here ]
-brackets :: Parser a -> Parser a
-brackets p = between (symbol "[") (symbol "]") p
+array = brackets $ value `sepBy` comma
