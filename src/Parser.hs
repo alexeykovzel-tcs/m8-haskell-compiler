@@ -3,171 +3,233 @@ module Parser where
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
 import Test.Evaluator
+import Data.Maybe
 import Lexer
 
 
--------- STATEMENTS --------
+{-
+    TODO: Write documentation...
+-}
+
+
+{------------------------}
+{-        @SCRIPT       -}
+{------------------------}
+
 
 type Script = [Statement]
 
 data Statement
-    = VarInit       Variable Expr
-    | VarDecl       Variable
-    | VarAssign     String Expr
-    | ArrUpdate     String Integer Expr
-    | FunDef        String ArgsDef DataType Script
-    | ForLoop       Variable LoopRange Script
-    | WhileLoop     Expr Script
-    | CondIf        Expr Script
-    | CondIfElse    Expr Script Script
-    | StructDef     String ArgsDef
-    | Return        Expr
-    | Exec          Expr
+    = DeclareVar    VarDef (Maybe Expr)
+    | AssignVar     String Expr
+    | InsertArray   String Integer Expr
+    | DefFunction   String ArgsDef DataType Script
+    | DefStruct     String ArgsDef
+    | LoopFor       VarDef LoopIter Script
+    | LoopWhile     Expr Script
+    | Condition     Expr Script (Maybe Script)
+    | ReturnValue   Expr
+    | Action        Expr
     deriving Show
 
-data LoopRange
-    = FromTo        Integer Integer
-    | ExprRange     Expr
+data LoopIter
+    = IterRange     Integer Integer
+    | IterArray     [Value]
+    | IterVar       String
     deriving Show
+
 
 script :: Parser Script
-script = many statement <?> "statement"
+script = many statement <?> "script"
+
 
 statement :: Parser Statement
 statement 
-    =   (varInit         <?> "variable initialization")
-    <|> (varDecl         <?> "variable declaration")
-    <|> (varAssign       <?> "variable assignment")
-    <|> (arrUpdate       <?> "array update")
-    <|> (funDef          <?> "function definition")
-    <|> (forLoop         <?> "for loop")
-    <|> (whileLoop       <?> "while loop")
-    <|> (condIfElse      <?> "if else condition")
-    <|> (condIf          <?> "if condition")
-    <|> (structDef       <?> "struct definition")
-    <|> (exec            <?> "execution")
+    =   declareVar
+    <|> try assignVar
+    <|> try insertArray
+    <|> defFunction
+    <|> defStruct
+    <|> loopFor
+    <|> loopWhile
+    <|> condition
+    <|> returnValue
+    <|> action
 
--- e.g. let x: Int = 2;
-varInit :: Parser Statement
-varInit = VarInit 
-    <$  reserved "let" <*> variable
-    <*  symbol "=" <*> expr 
-    <*  symbol ";"
 
 -- e.g. let x: Int;
-varDecl :: Parser Statement
-varDecl = VarDecl
-    <$  reserved "let" <*> variable
+declareVar :: Parser Statement
+declareVar = DeclareVar
+    <$  reserved "let" <*> varDef
+    <*> (Just 
+        <$> (symbol "=" *> expr ) 
+        <|> pure Nothing)
     <*  symbol ";"
+
 
 -- e.g. x = 3 + y;
-varAssign :: Parser Statement
-varAssign = VarAssign 
+assignVar :: Parser Statement
+assignVar = AssignVar 
     <$> name
     <*  symbol "=" <*> expr 
     <*  symbol ";"
+
 
 -- e.g. arr[2] = x + 3;
-arrUpdate :: Parser Statement
-arrUpdate = ArrUpdate 
+insertArray :: Parser Statement
+insertArray = InsertArray 
     <$> name
-    <*> brackets int 
+    <*> brackets intValue 
     <*  symbol "=" <*> expr 
     <*  symbol ";"
 
+
 -- e.g. fun increment(x: Int) { return x + 1; }
-funDef :: Parser Statement
-funDef = FunDef 
+defFunction :: Parser Statement
+defFunction = DefFunction
     <$  reserved "fun" <*> name 
     <*> parens argsDef <* symbol "->" <*> dataType 
     <*> braces script
 
+
 -- e.g. for x: Int in 2..10 { print(x); }
-forLoop :: Parser Statement
-forLoop = ForLoop 
-    <$  reserved "for" <*> variable 
-    <*  symbol "in" <*> loopRange 
+loopFor :: Parser Statement
+loopFor = LoopFor 
+    <$  reserved "for" <*> varDef
+    <*  symbol "in" <*> loopIter
     <*> braces script
 
-loopRange :: Parser LoopRange
-loopRange 
-    =   FromTo      <$> int <* symbol ".." <*> int
-    <|> ExprRange   <$> expr
+
+loopIter :: Parser LoopIter
+loopIter
+    =   IterRange   <$> intValue <* symbol ".." <*> intValue
+    <|> IterArray   <$> array
+    <|> IterVar     <$> name
+
 
 -- e.g. while x < 3 { print(x); }
-whileLoop :: Parser Statement
-whileLoop = WhileLoop 
+loopWhile :: Parser Statement
+loopWhile = LoopWhile 
     <$  reserved "while" <*> expr 
     <*> braces script
 
--- e.g. if x < y { print(x); } else { print(y); }
-condIfElse :: Parser Statement
-condIfElse = CondIfElse 
-    <$ reserved "if" <*> expr 
-    <*> braces script 
-    <*  reserved "else" 
-    <*> braces script
 
--- e.g. if x < y { print(x); }
-condIf :: Parser Statement
-condIf = CondIf
+-- e.g. if x < y { print(x); } else { print(y); }
+condition :: Parser Statement
+condition = Condition 
     <$  reserved "if" <*> expr 
     <*> braces script
+    <*> (Just 
+        <$> (reserved "else" *> braces script)
+        <|> pure Nothing)
+
 
 -- e.g. struct Person { first_name: String }
-structDef :: Parser Statement
-structDef = StructDef 
+defStruct :: Parser Statement
+defStruct = DefStruct 
     <$  reserved "struct" <*> name 
     <*> braces argsDef
-    <*  symbol ";"
+
 
 -- e.g. return x;
-return :: Parser Statement
-return = Return
-    <$ reserved "return" <*> expr
+returnValue :: Parser Statement
+returnValue = ReturnValue
+    <$  reserved "return" <*> expr
     <*  symbol ";"
 
+
 -- e.g. print(x);
-exec :: Parser Statement
-exec = Exec 
+action :: Parser Statement
+action = Action 
     <$> expr 
-    <* symbol ";"
+    <*  symbol ";"
 
 
--------- EXPRESSIONS --------
+
+{------------------------}
+{-     @EXPRESSIONS     -}
+{------------------------}
+
 
 data Expr
-    = Const         Value
-    | Var           String
-    | Calc          Expr Op Expr
-    | FunCall       String [Expr]
-    | StructInit    String [Expr]
-    | Ternary       Expr Expr Expr
-    | Lambda        ArgsDef Script
-    | None
+    = CallFunction      String [Expr]
+    | DeclareStruct     String [Expr]
+    | TernaryOp         Expr Expr Expr
+    | Lambda            ArgsDef Script
+    | Both              Expr Expr
+    | OneOf             Expr Expr
+    | IfEq              Expr Expr
+    | IfMoreOrEq        Expr Expr
+    | IfLessOrEq        Expr Expr
+    | IfMore            Expr Expr
+    | IfLess            Expr Expr
+    | Add               Expr Expr
+    | Substract         Expr Expr
+    | Multiply          Expr Expr
+    | Divide            Expr Expr
+    | Modulo            Expr Expr
+    | Variable          String
+    | Fixed             Value
     deriving Show
 
+
 expr :: Parser Expr
-expr 
-    =   (parens expr        <?> "parentheses")
-    <|> (none               <?> "none")
-    <|> (structInit         <?> "struct initialization")
-    <|> (lambda             <?> "lambda expression")
-    <|> (ternary            <?> "ternary operator")
-    <|> (operation          <?> "operation")
-    <|> (funCall            <?> "function call")
-    <|> (Const <$> value    <?> "value")
-    <|> (Var <$> name       <?> "variable")
+expr = try ternaryOp <|> operation
 
--- a.k.a. null
-none :: Parser Expr
-none = None <$ symbol "None"
 
--- e.g. Person { "John", "Smith" }
-structInit :: Parser Expr
-structInit = StructInit 
-    <$> name 
-    <*> braces args
+-- e.g. (x % 2 == 0) ? true : false
+ternaryOp :: Parser Expr
+ternaryOp = TernaryOp 
+    <$> operation 
+    <*  symbol "?" <*> operation 
+    <*  symbol ":" <*> operation
+
+
+operation :: Parser Expr
+operation = logicand `chainl1` op
+    where op 
+            =   (Both           <$ reservedOp "&&") 
+            <|> (OneOf          <$ reservedOp "||")
+
+
+-- logicand && logicand || logicand 
+logicand :: Parser Expr
+logicand = comparand `chainl1` op
+    where op 
+            =   (IfEq           <$ reservedOp "==")
+            <|> (IfMoreOrEq     <$ reservedOp ">=")
+            <|> (IfLessOrEq     <$ reservedOp "<=")
+            <|> (IfMore         <$ reservedOp ">")
+            <|> (IfLess         <$ reservedOp "<")
+
+
+-- comparand == comparand 
+comparand :: Parser Expr
+comparand = term `chainl1` op
+    where op 
+            =   (Add            <$ reservedOp "+")
+            <|> (Substract      <$ reservedOp "-")
+
+
+-- term + term - term
+term :: Parser Expr
+term = factor `chainl1` op
+    where op 
+            =   (Multiply       <$ reservedOp "*")
+            <|> (Divide         <$ reservedOp "/")
+            <|> (Modulo         <$ reservedOp "%")
+
+
+-- factor * factor / factor
+factor :: Parser Expr
+factor 
+    =   Fixed <$> value
+    <|> try lambda
+    <|> parens expr
+    <|> try callFunction
+    <|> try declareStruct
+    <|> Variable <$> name
+
 
 -- e.g. (x: Int) -> { x = x + 1; }
 lambda :: Parser Expr
@@ -176,80 +238,64 @@ lambda = Lambda
     <*  symbol "->" 
     <*> braces script
 
--- e.g. (x % 2 == 0) ? true : false
-ternary :: Parser Expr
-ternary = Ternary 
-    <$> expr 
-    <*  symbol "?" <*> expr 
-    <*  symbol ":" <*> expr
-
--- e.g. x + y
-operation :: Parser Expr
-operation = Calc 
-    <$> expr <*> op <*> expr
 
 -- e.g. print("Hello")
-funCall :: Parser Expr
-funCall = FunCall 
+callFunction :: Parser Expr
+callFunction = CallFunction 
     <$> name <*> parens args
 
 
--------- OPERATORS --------
-
-data Op
-    = And | Or
-    | Eq  | EqOrMore | EqOrLess | More | Less
-    | Add | Sub | Mult | Div | Mod
-    deriving Show
-
-op :: Parser Op
-op 
-    =   And         <$ reservedOp "&&"
-    <|> Or          <$ reservedOp "||"
-    <|> Eq          <$ reservedOp "=="
-    <|> EqOrMore    <$ reservedOp ">="
-    <|> EqOrLess    <$ reservedOp "<="
-    <|> More        <$ reservedOp ">"
-    <|> Less        <$ reservedOp "<"
-    <|> Add         <$ reservedOp "+"
-    <|> Sub         <$ reservedOp "-"
-    <|> Mult        <$ reservedOp "*"
-    <|> Div         <$ reservedOp "/"
-    <|> Mod         <$ reservedOp "%"
+-- e.g. Person { "John", "Smith" }
+declareStruct :: Parser Expr
+declareStruct = DeclareStruct 
+    <$> name 
+    <*> braces args
 
 
--------- ARGUMENTS --------
 
-type ArgsDef = [Variable]
+{------------------------}
+{-         @ARGS        -}
+{------------------------}
 
+
+type ArgsDef = [VarDef]
+
+-- x: Int, y: Int
 argsDef :: Parser ArgsDef
-argsDef = variable `sepBy` (symbol ",")
+argsDef = varDef `sepBy` (symbol ",")
 
+
+-- 2 + 3, 5, "Hello" 
 args :: Parser [Expr]
 args = expr `sepBy` (symbol ",")
 
 
--------- VALUES --------
 
-data DataType
-    = StrType
-    | BoolType
-    | IntType
-    | ArrType
-    | StructType
-    deriving Show
+{------------------------}
+{-        @VALUES       -}
+{------------------------}
 
-data Variable
-    = StaticVar     String DataType
-    | DynamicVar    String
+
+data VarDef 
+    = VarDef String DataType
     deriving Show
 
 data Value
     = Str           String 
     | Bool          Bool 
     | Int           Integer
-    | Arr           [Value]
+    | Array         [Value]
+    | None
     deriving Show
+
+data DataType
+    = StrType
+    | BoolType
+    | IntType
+    | ArrayType
+    | StructType
+    deriving Show
+
 
 dataType :: Parser DataType
 dataType 
@@ -258,34 +304,53 @@ dataType
     <|> IntType     <$ reserved "Int"
     <|> StructType  <$ name
 
-variable :: Parser Variable
-variable 
-    =   StaticVar   <$> name <* symbol ":" <*> dataType
-    <|> DynamicVar  <$> name
-    
+
+varDef :: Parser VarDef
+varDef = VarDef 
+    <$> name <* symbol ":" 
+    <*> dataType
+
+
 value :: Parser Value
 value 
-    =   Str         <$> str
-    <|> Bool        <$> bool
-    <|> Int         <$> int
-    <|> Arr         <$> arr
+    =   Str         <$> strValue
+    <|> Int         <$> intValue
+    <|> Array       <$> array
+    <|> Bool        <$> boolValue
+    <|> None        <$  symbol "None"
 
-str :: Parser String
-str = between (char '"') (char '"') 
-        (many $ noneOf "\"")
 
-bool :: Parser Bool
-bool =  False       <$ reserved "false"
+-- e.g. "Hello World"
+strValue :: Parser String
+strValue = between (char '"') (char '"') (many strChar)
+    where 
+        strChar = escapeChar <|> noneOf "\"\\"
+        escapeChar = char '\\' *> oneOf "\"\\"
+
+
+-- true or false
+boolValue :: Parser Bool
+boolValue
+    =   False       <$ reserved "false"
     <|> True        <$ reserved "true"
 
-arr :: Parser [Value]
-arr = brackets $ value `sepBy` (symbol ",")
+
+-- e.g. [1, 2, 3]
+array :: Parser [Value]
+array = brackets $ value `sepBy` (symbol ",")
 
 
--------- HELPER FUNCTIONS --------
 
+{------------------------}
+{-        @UTILS        -}
+{------------------------}
+
+
+-- Parse: { something here }
 braces :: Parser a -> Parser a 
 braces p = between (symbol "{") (symbol "}") p
 
+
+-- Parse: [ something here ]
 brackets :: Parser a -> Parser a
 brackets p = between (symbol "[") (symbol "]") p

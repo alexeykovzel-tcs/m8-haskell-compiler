@@ -29,8 +29,8 @@ lexer = Token.makeTokenParser languageDef
 name :: Parser String
 name = Token.identifier lexer
 
-int :: Parser Integer
-int = Token.integer lexer
+intValue :: Parser Integer
+intValue = Token.integer lexer
 
 parens :: Parser a -> Parser a
 parens = Token.parens lexer
