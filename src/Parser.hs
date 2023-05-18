@@ -25,21 +25,21 @@ parser p xs = either (error . show) id result
 type Script = [Statement]
 
 data Statement
-    = DeclareVar    VarDef (Maybe Expr)
-    | AssignVar     String Expr
-    | InsertArray   String Integer Expr
-    | DefFunction   String ArgsDef DataType Script
-    | DefStruct     String ArgsDef
-    | LoopFor       VarDef LoopIter Script
-    | LoopWhile     Expr Script
+    = VarDecl       VarDef (Maybe Expr)
+    | VarAssign     String Expr
+    | ArrInsert     String Integer Expr
+    | FunDef        String ArgsDef (Maybe DataType) Script
+    | StructDef     String ArgsDef
+    | ForLoop       VarDef LoopIter Script
+    | WhileLoop     Expr Script
     | Condition     Expr Script (Maybe Script)
-    | ReturnValue   Expr
+    | ReturnVal     Expr
     | Action        Expr
     deriving Show
 
 data LoopIter
     = IterRange     Integer Integer
-    | IterArray     [Value]
+    | IterArr       [Val]
     | IterVar       String
     deriving Show
 
@@ -48,47 +48,49 @@ script = whiteSpace *> many statement
 
 statement :: Parser Statement
 statement 
-    =   declareVar          -- e.g. let x: Int;
-    <|> try assignVar       -- e.g. x = 3 + y;
-    <|> try insertArray     -- e.g. arr[2] = x + 3;
-    <|> defFunction         -- e.g. fun increment(x: Int) { ... }
-    <|> defStruct           -- e.g. for x: Int in 2..10 { ... }
-    <|> loopFor             -- e.g. while x < 3 { print(x); }
-    <|> loopWhile           -- e.g. if x < y { ... } else { ... }
+    =   varDecl             -- e.g. let x: Int;
+    <|> try varAssign       -- e.g. x = 3 + y;
+    <|> try arrInsert       -- e.g. arr[2] = x + 3;
+    <|> funDef              -- e.g. fun increment(x: Int) { ... }
+    <|> structDef           -- e.g. for x: Int in 2..10 { ... }
+    <|> forLoop             -- e.g. while x < 3 { print(x); }
+    <|> whileLoop           -- e.g. if x < y { ... } else { ... }
     <|> condition           -- e.g. struct Person { first_name: String }
-    <|> returnValue         -- e.g. return x;
+    <|> returnVal           -- e.g. return x;
     <|> action              -- e.g. print(x);
 
-declareVar :: Parser Statement
-declareVar = DeclareVar
+varDecl :: Parser Statement
+varDecl = VarDecl
     <$  reserved "let" <*> varDef
     <*> (Just 
-        <$> (symbol "=" *> expr ) 
+        <$> (symbol "=" *> expr) 
         <|> pure Nothing)
     <*  semi
 
-assignVar :: Parser Statement
-assignVar = AssignVar 
+varAssign :: Parser Statement
+varAssign = VarAssign 
     <$> name
     <*  symbol "=" <*> expr 
     <*  semi
 
-insertArray :: Parser Statement
-insertArray = InsertArray 
+arrInsert :: Parser Statement
+arrInsert = ArrInsert 
     <$> name
-    <*> brackets intValue 
+    <*> brackets intVal
     <*  symbol "=" <*> expr 
     <*  semi
 
-defFunction :: Parser Statement
-defFunction = DefFunction
+funDef :: Parser Statement
+funDef = FunDef
     <$  reserved "fun" <*> name 
     <*> parens argsDef 
-    <* symbol "->" <*> dataType 
+    <*> (Just
+        <$> (symbol "->" *> dataType)
+        <|> pure Nothing)
     <*> braces script
 
-loopFor :: Parser Statement
-loopFor = LoopFor 
+forLoop :: Parser Statement
+forLoop = ForLoop 
     <$  reserved "for" <*> varDef
     <*  symbol "in" <*> loopIter
     <*> braces script
@@ -96,17 +98,17 @@ loopFor = LoopFor
 loopIter :: Parser LoopIter
 loopIter
     =   iterRange
-    <|> IterArray   <$> array
+    <|> IterArr     <$> arrVal
     <|> IterVar     <$> name
 
 iterRange :: Parser LoopIter
 iterRange = IterRange   
-    <$> intValue 
+    <$> intVal 
     <* symbol ".." 
-    <*> intValue
+    <*> intVal
 
-loopWhile :: Parser Statement
-loopWhile = LoopWhile 
+whileLoop :: Parser Statement
+whileLoop = WhileLoop
     <$  reserved "while" <*> expr 
     <*> braces script
 
@@ -118,13 +120,13 @@ condition = Condition
         <$> (reserved "else" *> braces script)
         <|> pure Nothing)
 
-defStruct :: Parser Statement
-defStruct = DefStruct 
+structDef :: Parser Statement
+structDef = StructDef 
     <$  reserved "struct" <*> name 
     <*> braces argsDef
 
-returnValue :: Parser Statement
-returnValue = ReturnValue
+returnVal :: Parser Statement
+returnVal = ReturnVal
     <$  reserved "return" <*> expr
     <*  semi
 
@@ -139,31 +141,31 @@ action = Action
 {------------------------}
 
 data Expr
-    = CallFunction      String [Expr]
-    | DeclareStruct     String [Expr]
-    | TernaryOp         Expr Expr Expr
-    | Lambda            ArgsDef Script
-    | Both              Expr Expr
-    | OneOf             Expr Expr
-    | IfEq              Expr Expr
-    | IfMoreOrEq        Expr Expr
-    | IfLessOrEq        Expr Expr
-    | IfMore            Expr Expr
-    | IfLess            Expr Expr
-    | Add               Expr Expr
-    | Substract         Expr Expr
-    | Multiply          Expr Expr
-    | Divide            Expr Expr
-    | Modulo            Expr Expr
-    | Variable          String
-    | Fixed             Value
+    = FunCall       String [Expr]
+    | StructDecl    String [Expr]
+    | Ternary       Expr Expr Expr
+    | Lambda        ArgsDef Script
+    | Both          Expr Expr
+    | OneOf         Expr Expr
+    | Eq            Expr Expr
+    | MoreOrEq      Expr Expr
+    | LessOrEq      Expr Expr
+    | More          Expr Expr
+    | Less          Expr Expr
+    | Add           Expr Expr
+    | Sub           Expr Expr
+    | Mult          Expr Expr
+    | Div           Expr Expr
+    | Mod           Expr Expr
+    | Var           String
+    | Fixed         Val
     deriving Show
 
 expr :: Parser Expr
-expr = try ternaryOp <|> operation
+expr = try ternary <|> operation
 
-ternaryOp :: Parser Expr
-ternaryOp = TernaryOp 
+ternary :: Parser Expr
+ternary = Ternary 
     <$> operation 
     <*  symbol "?" <*> operation 
     <*  symbol ":" <*> operation
@@ -171,43 +173,43 @@ ternaryOp = TernaryOp
 operation :: Parser Expr
 operation = logicand `chainl1` op
     where op 
-            =   (Both           <$ reservedOp "&&") 
-            <|> (OneOf          <$ reservedOp "||")
+            =   (Both       <$ reservedOp "&&") 
+            <|> (OneOf      <$ reservedOp "||")
 
 -- logicand && logicand || logicand 
 logicand :: Parser Expr
 logicand = comparand `chainl1` op
     where op 
-            =   (IfEq           <$ reservedOp "==")
-            <|> (IfMoreOrEq     <$ reservedOp ">=")
-            <|> (IfLessOrEq     <$ reservedOp "<=")
-            <|> (IfMore         <$ reservedOp ">")
-            <|> (IfLess         <$ reservedOp "<")
+            =   (Eq         <$ reservedOp "==")
+            <|> (MoreOrEq   <$ reservedOp ">=")
+            <|> (LessOrEq   <$ reservedOp "<=")
+            <|> (More       <$ reservedOp ">")
+            <|> (Less       <$ reservedOp "<")
 
 -- comparand == comparand 
 comparand :: Parser Expr
 comparand = term `chainl1` op
     where op 
-            =   (Add            <$ reservedOp "+")
-            <|> (Substract      <$ reservedOp "-")
+            =   (Add        <$ reservedOp "+")
+            <|> (Sub        <$ reservedOp "-")
 
 -- term + term - term
 term :: Parser Expr
 term = factor `chainl1` op
     where op 
-            =   (Multiply       <$ reservedOp "*")
-            <|> (Divide         <$ reservedOp "/")
-            <|> (Modulo         <$ reservedOp "%")
+            =   (Mult       <$ reservedOp "*")
+            <|> (Div        <$ reservedOp "/")
+            <|> (Mod        <$ reservedOp "%")
 
 -- factor * factor / factor
 factor :: Parser Expr
 factor 
-    =   Fixed <$> value
+    =   Fixed <$> val
     <|> try lambda              -- e.g. (x: Int) -> { ... }
     <|> parens expr             -- e.g. (2 + 3)
-    <|> try callFunction        -- e.g. print("Hello")
-    <|> try declareStruct       -- e.g. Person { "John" }
-    <|> Variable <$> name
+    <|> try funCall             -- e.g. print("Hello")
+    <|> try structDecl          -- e.g. Person { "John" }
+    <|> Var <$> name
 
 lambda :: Parser Expr
 lambda = Lambda 
@@ -215,12 +217,12 @@ lambda = Lambda
     <*  symbol "->" 
     <*> braces script
 
-callFunction :: Parser Expr
-callFunction = CallFunction 
+funCall :: Parser Expr
+funCall = FunCall 
     <$> name <*> parens args
 
-declareStruct :: Parser Expr
-declareStruct = DeclareStruct 
+structDecl :: Parser Expr
+structDecl = StructDecl 
     <$> name 
     <*> braces args
 
@@ -246,11 +248,11 @@ data VarDef
     = VarDef String DataType
     deriving Show
 
-data Value
-    = Str           String 
-    | Bool          Bool 
-    | Int           Integer
-    | Array         [Value]
+data Val
+    = Str       String 
+    | Bool      Bool 
+    | Int       Integer
+    | Arr       [Val]
     | None
     deriving (Show, Eq)
 
@@ -258,7 +260,7 @@ data DataType
     = StrType
     | BoolType
     | IntType
-    | ArrayType
+    | ArrType
     | StructType
     deriving Show
 
@@ -267,6 +269,7 @@ dataType
     =   StrType     <$ reserved "String"
     <|> BoolType    <$ reserved "Bool"
     <|> IntType     <$ reserved "Int"
+    <|> ArrType     <$ reserved "[]"
     <|> StructType  <$ name
 
 varDef :: Parser VarDef
@@ -274,24 +277,24 @@ varDef = VarDef
     <$> name <* colon
     <*> dataType
 
-value :: Parser Value
-value 
-    =   Str         <$> strValue
-    <|> Int         <$> intValue
-    <|> Array       <$> array
-    <|> Bool        <$> boolValue
-    <|> None        <$  symbol "None"
+val :: Parser Val
+val 
+    =   Str         <$> strVal
+    <|> Int         <$> intVal
+    <|> Arr         <$> arrVal
+    <|> Bool        <$> boolVal
+    <|> None        <$  reserved "None"
 
-strValue :: Parser String
-strValue = between (char '"') (char '"') (many strChar)
+strVal :: Parser String
+strVal = between (char '"') (char '"') (many strChar)
     where 
         strChar = escapeChar <|> noneOf "\"\\"
         escapeChar = char '\\' *> oneOf "\"\\"
 
-array :: Parser [Value]
-array = brackets $ value `sepBy` comma
+arrVal :: Parser [Val]
+arrVal = brackets $ val `sepBy` comma
 
-boolValue :: Parser Bool
-boolValue
+boolVal :: Parser Bool
+boolVal
     =   False       <$ reserved "false"
     <|> True        <$ reserved "true"

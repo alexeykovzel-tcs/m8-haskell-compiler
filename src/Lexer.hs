@@ -12,16 +12,16 @@ languageDef = emptyDef {
         "*", "/", "%"                       -- Factors
     ],
     Token.reservedNames   = [ 
-        "let", "struct", "fun",             -- Declarations
-        "for", "while", "if", "return",     -- Statements 
-        "false", "true",                    -- Bool values
-        "Int", "String", "Bool"             -- Basic types
+        "let", "struct", "fun",
+        "for", "while", "if", "return",
+        "Int", "String", "Bool", "None", "[]",
+        "false", "true"
     ],
     Token.commentStart    = "/*",
     Token.commentEnd      = "*/",
     Token.commentLine     = "//",
-    Token.identStart      = letter,
-    Token.identLetter     = alphaNum
+    Token.identStart      = letter <|> char '_',
+    Token.identLetter     = alphaNum <|> char '_'
 }
 
 lexer = Token.makeTokenParser languageDef
@@ -50,8 +50,8 @@ semi = Token.semi lexer
 colon :: Parser String
 colon = Token.colon lexer
 
-intValue :: Parser Integer
-intValue = Token.integer lexer
+intVal :: Parser Integer
+intVal = Token.integer lexer
 
 reserved :: String -> Parser ()
 reserved = Token.reserved lexer
