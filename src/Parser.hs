@@ -1,4 +1,4 @@
-module Parser where
+module Parser(parser, script, statement, expr, DataType) where
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
