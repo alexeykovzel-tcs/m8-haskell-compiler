@@ -19,3 +19,6 @@ cabal.sandbox.config
 # IDE/Editor directories
 .vscode/
 .idea/
+
+# syntax highlighting extension
+alphascript/
