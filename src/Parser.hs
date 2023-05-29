@@ -1,4 +1,4 @@
-module Parser(parser, script, statement, expr, DataType) where
+module Parser where
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
@@ -26,10 +26,10 @@ type Script = [Statement]
 
 data Statement
     = VarDecl       VarDef (Maybe Expr)
-    | VarAssign     String Expr
-    | ArrInsert     String Integer Expr
-    | FunDef        String ArgsDef (Maybe DataType) Script
-    | StructDef     String ArgsDef
+    | VarAssign     NameUse Expr
+    | ArrInsert     NameUse Integer Expr
+    | FunDef        NameUse ArgsDef (Maybe DataType) Script
+    | StructDef     NameUse ArgsDef
     | ForLoop       VarDef LoopIter Script
     | WhileLoop     Expr Script
     | Condition     Expr Script (Maybe Script)
@@ -40,7 +40,7 @@ data Statement
 data LoopIter
     = IterRange     Integer Integer
     | IterArr       [Val]
-    | IterVar       String
+    | IterVar       NameUse
     deriving Show
 
 script :: Parser Script
@@ -49,8 +49,8 @@ script = whiteSpace *> many statement
 statement :: Parser Statement
 statement 
     =   varDecl             -- e.g. let x: Int;
-    <|> try varAssign       -- e.g. x = 3 + y;
-    <|> try arrInsert       -- e.g. arr[2] = x + 3;
+    <|> try varAssign     -- e.g. x = 3 + y;
+    <|> try arrInsert     -- e.g. arr[2] = x + 3;
     <|> funDef              -- e.g. fun increment(x: Int) { ... }
     <|> structDef           -- e.g. for x: Int in 2..10 { ... }
     <|> forLoop             -- e.g. while x < 3 { print(x); }
@@ -69,20 +69,20 @@ varDecl = VarDecl
 
 varAssign :: Parser Statement
 varAssign = VarAssign 
-    <$> name
+    <$> nameUse
     <*  symbol "=" <*> expr 
     <*  semi
 
 arrInsert :: Parser Statement
 arrInsert = ArrInsert 
-    <$> name
+    <$> nameUse
     <*> brackets intVal
     <*  symbol "=" <*> expr 
     <*  semi
 
 funDef :: Parser Statement
 funDef = FunDef
-    <$  reserved "fun" <*> name 
+    <$  reserved "fun" <*> nameUse 
     <*> parens argsDef 
     <*> (Just
         <$> (symbol "->" *> dataType)
@@ -97,15 +97,9 @@ forLoop = ForLoop
 
 loopIter :: Parser LoopIter
 loopIter
-    =   iterRange
+    =   IterRange   <$> intVal <* symbol ".." <*> intVal
     <|> IterArr     <$> arrVal
-    <|> IterVar     <$> name
-
-iterRange :: Parser LoopIter
-iterRange = IterRange   
-    <$> intVal 
-    <* symbol ".." 
-    <*> intVal
+    <|> IterVar     <$> nameUse
 
 whileLoop :: Parser Statement
 whileLoop = WhileLoop
@@ -122,7 +116,7 @@ condition = Condition
 
 structDef :: Parser Statement
 structDef = StructDef 
-    <$  reserved "struct" <*> name 
+    <$  reserved "struct" <*> nameUse
     <*> braces argsDef
 
 returnVal :: Parser Statement
@@ -141,8 +135,8 @@ action = Action
 {------------------------}
 
 data Expr
-    = FunCall       String [Expr]
-    | StructDecl    String [Expr]
+    = FunCall       NameUse [Expr]
+    | StructDecl    NameUse [Expr]
     | Ternary       Expr Expr Expr
     | Lambda        ArgsDef Script
     | Both          Expr Expr
@@ -157,7 +151,7 @@ data Expr
     | Mult          Expr Expr
     | Div           Expr Expr
     | Mod           Expr Expr
-    | Var           String
+    | Var           NameUse
     | Fixed         Val
     deriving Show
 
@@ -209,7 +203,7 @@ factor
     <|> parens expr             -- e.g. (2 + 3)
     <|> try funCall             -- e.g. print("Hello")
     <|> try structDecl          -- e.g. Person { "John" }
-    <|> Var <$> name
+    <|> Var <$> nameUse
 
 lambda :: Parser Expr
 lambda = Lambda 
@@ -219,11 +213,11 @@ lambda = Lambda
 
 funCall :: Parser Expr
 funCall = FunCall 
-    <$> name <*> parens args
+    <$> nameUse <*> parens args
 
 structDecl :: Parser Expr
 structDecl = StructDecl 
-    <$> name 
+    <$> nameUse 
     <*> braces args
 
 
@@ -244,8 +238,10 @@ args = expr `sepBy` comma
 {-        @VALUES       -}
 {------------------------}
 
+type NameUse = (String, SourcePos)
+
 data VarDef 
-    = VarDef String DataType
+    = VarDef NameUse (Maybe DataType)
     deriving Show
 
 data Val
@@ -270,12 +266,14 @@ dataType
     <|> BoolType    <$ reserved "Bool"
     <|> IntType     <$ reserved "Int"
     <|> ArrType     <$ reserved "[]"
-    <|> StructType  <$ name
+    <|> StructType  <$ nameUse
 
 varDef :: Parser VarDef
 varDef = VarDef 
-    <$> name <* colon
-    <*> dataType
+    <$> nameUse 
+    <*> (Just
+        <$> (colon *> dataType)
+        <|> pure Nothing)
 
 val :: Parser Val
 val 
@@ -298,3 +296,6 @@ boolVal :: Parser Bool
 boolVal
     =   False       <$ reserved "false"
     <|> True        <$ reserved "true"
+
+nameUse :: Parser NameUse
+nameUse = (,) <$> name <*> getPosition
