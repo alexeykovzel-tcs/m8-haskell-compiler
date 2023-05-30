@@ -222,19 +222,6 @@ structDecl = StructDecl
 
 
 {------------------------}
-{-         @ARGS        -}
-{------------------------}
-
-type ArgsDef = [VarDef]
-
-argsDef :: Parser ArgsDef
-argsDef = varDef `sepBy` comma
-
-args :: Parser [Expr]
-args = expr `sepBy` comma
-
-
-{------------------------}
 {-        @VALUES       -}
 {------------------------}
 
@@ -305,3 +292,16 @@ boolVal
 
 -- nameUse :: Parser NameUse
 -- nameUse = (,) <$> name <*> getPosition
+
+
+{------------------------}
+{-         @ARGS        -}
+{------------------------}
+
+type ArgsDef = [VarDef]
+
+argsDef :: Parser ArgsDef
+argsDef = varDef `sepBy` comma
+
+args :: Parser [Expr]
+args = expr `sepBy` comma

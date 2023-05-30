@@ -3,89 +3,99 @@ module Elaborator where
 import Parser
 import Data.Maybe
 import Data.Either
+import Text.Parsec.Pos
 import qualified Data.Map as Map
 
 -- Context contains the information about declared
 -- variables, structures, functions, etc. 
 -- Each scope knows about its upper (parent) scope
 data Context 
-    = Root LUT
-    | Scope Context LUT
+    = Scope Context LUT
+    | Null
 
-type LUT = Map.Map String Attr
+type LUT = Map.Map String Entity
 
-data Attr 
+data Entity
     = Var DataType
     | Fun [DataType] DataType
     | Struct [DataType]
 
 data Error 
-    = InvalidType String
-    | EmptyDecl String
-    | OutOfBounds
+    = InvalidType   SourcePos String    -- applying operation to an invalid type
+    | DupDecl       SourcePos String    -- duplicate entity declaration
+    | MissingDecl   SourcePos String    -- calling non-existent entity
+    | EmptyDecl     SourcePos String    -- declaring a variable with no type and value
+    | NoReturn      SourcePos           -- declaring a function without return
 
 elaborate :: Script -> Either Error Context
-elaborate script = checkScript (Root Map.empty) script
+elaborate script = checkScript (Scope Null Map.empty) script
 
 checkScript :: Context -> Script -> Either Error Context
 checkScript ctx (x:xs) = case (checkStmt ctx x) of
     Right nextCtx -> checkScript nextCtx xs
     Left err -> Left err
 
-checkStmt :: Context -> Statement -> Either Error Context
-
--- incomplete example which might help: 
+-- incomplete example of checkStmt(), which might be helpful: 
 
 -- checkStmt ctx (VarDecl def@(VarDef name type) expr)
 --     | declared ctx name = Left $ InvalidType name
 --     | isNothing type && isNothing expr = Left $ EmptyDecl name
---     | otherwise = Right $ insert ctx (Var type) name
---     | isNothing type && isJust expr = insert ctx 
+--     | otherwise = Right $ update ctx (Var type) name
+
+checkStmt :: Context -> Statement -> Either Error Context
 
 -- Check: not already declared
 -- Check: no type -> has value (type is inferred)
 -- Check: has type -> matches value
-checkStmt ctx (VarDecl def@(VarDef name dataType) expr) = Right ctx
+checkStmt ctx stmt@(VarDecl def@(VarDef name dataType) expr) = Right ctx
 
 -- Check: variable is declared
--- Check: value matches type
-checkStmt ctx (VarAssign name expr) = Right ctx
+-- Check: expr matches type
+checkStmt ctx stmt@(VarAssign name expr) = Right ctx
 
 -- Check: type is array
--- Check: value matches type
-checkStmt ctx (ArrInsert name idx expr) = Right ctx
+-- Check: expr matches array type
+checkStmt ctx stmt@(ArrInsert name idx expr) = Right ctx
 
--- Check: script contains return 
--- Do: create score
+-- Check: script contains a return statement
+-- Do: create a new scope in the context
 -- Do: elaborate script
--- Do: add to context
-checkStmt ctx (FunDef name args returnType script) = Right ctx
+-- Do: add function to context (with args and return type)
+checkStmt ctx stmt@(FunDef name args returnType script) = Right ctx
 
--- add to LUT
-checkStmt ctx (StructDef name args) = Right ctx
+-- Do: Add struct to context (with its args)
+checkStmt ctx stmt@(StructDef name args) = Right ctx
 
 -- Check: iter type
 -- Do: elaborate script
--- Do: add idx to LUT
-checkStmt ctx (ForLoop idx iter script) = Right ctx
+-- Do: add idx (as variable) to context
+checkStmt ctx stmt@(ForLoop idx iter script) = Right ctx
 
 -- Check: expr is bool
 -- Do: elaborate script
-checkStmt ctx (WhileLoop expr script) = Right ctx
+checkStmt ctx stmt@(WhileLoop expr script) = Right ctx
 
 -- Check: expr is bool
-checkStmt ctx (Condition expr ifScript elseScript) = Right ctx
+-- Do: elaborate if script
+-- Do: elaborate else script (if exists)
+checkStmt ctx stmt@(Condition expr ifScript elseScript) = Right ctx
 
--- Check: function return matches expr
-checkStmt ctx (ReturnVal expr) = Right ctx
+-- Check: function return type matches expr
+checkStmt ctx stmt@(ReturnVal expr) = Right ctx
 
-exprType :: Expr -> DataType
-exprType expr = StrType
 
+{------------------------}
+{-       @HELPERS       -}
+{------------------------}
+
+-- Returns true if an entity with such name 
+-- existing in the context
 declared :: String -> Context -> Bool
+declared name Null = False
 declared name (Scope upper lut) 
     = Map.member name lut || declared name upper
 
-insert :: String -> Attr -> Context -> Context
-insert name attr (Scope upper lut)
-    = Scope upper (Map.insert name attr lut)
+-- Add an entity to the context 
+update :: String -> Entity -> Context -> Context
+update name entity (Scope upper lut)
+    = Scope upper (Map.insert name entity lut)
