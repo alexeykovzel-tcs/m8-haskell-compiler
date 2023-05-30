@@ -254,7 +254,7 @@ data DataType
     = StrType
     | BoolType
     | IntType
-    | StructType
+    | StructType String
     | ArrType DataType (Maybe Integer)
     deriving Show
 
@@ -263,7 +263,7 @@ baseType
     =   StrType     <$  reserved "String"
     <|> BoolType    <$  reserved "Bool"
     <|> IntType     <$  reserved "Int"
-    <|> StructType  <$  name
+    <|> StructType  <$> name
 
 arrSpec :: Parser [Maybe Integer]
 arrSpec = many $ brackets 

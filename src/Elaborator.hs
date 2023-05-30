@@ -15,29 +15,22 @@ data Context
 type LUT = Map.Map String Attr
 
 data Attr 
-    = Var Type
-    | Fun [Type] Type
-    | Struct [Type]
-
-data Type 
-    = Str
-    | Arr Type Integer
-    | Int
-    | Bool
+    = Var DataType
+    | Fun [DataType] DataType
+    | Struct [DataType]
 
 data Error 
     = InvalidType String
-    | EmptyDecl
+    | EmptyDecl String
     | OutOfBounds
 
 elaborate :: Script -> Either Error Context
 elaborate script = checkScript (Root Map.empty) script
 
 checkScript :: Context -> Script -> Either Error Context
-checkScript ctx (x:xs) = case xAfter of
+checkScript ctx (x:xs) = case (checkStmt ctx x) of
+    Right nextCtx -> checkScript nextCtx xs
     Left err -> Left err
-    Right newCtx -> checkScript newCtx xs
-    where xAfter = checkStmt ctx x
 
 checkStmt :: Context -> Statement -> Either Error Context
 
@@ -45,9 +38,9 @@ checkStmt :: Context -> Statement -> Either Error Context
 
 -- checkStmt ctx (VarDecl def@(VarDef name type) expr)
 --     | declared ctx name = Left $ InvalidType name
---     | isNothing type && isNothing expr = Left EmptyDecl
---     | isNothing type && isJust expr = -- infer type
---     | otherwise = Right $ insert ctx (Var ...) name
+--     | isNothing type && isNothing expr = Left $ EmptyDecl name
+--     | otherwise = Right $ insert ctx (Var type) name
+--     | isNothing type && isJust expr = insert ctx 
 
 -- Check: not already declared
 -- Check: no type -> has value (type is inferred)
@@ -85,6 +78,9 @@ checkStmt ctx (Condition expr ifScript elseScript) = Right ctx
 
 -- Check: function return matches expr
 checkStmt ctx (ReturnVal expr) = Right ctx
+
+exprType :: Expr -> DataType
+exprType expr = StrType
 
 declared :: String -> Context -> Bool
 declared name (Scope upper lut) 
