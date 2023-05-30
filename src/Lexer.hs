@@ -12,7 +12,7 @@ languageDef = emptyDef {
         "*", "/", "%"                       -- Factors
     ],
     Token.reservedNames   = [ 
-        "let", "struct", "fun",
+        "let", "struct", "fun", 
         "for", "while", "if", "return",
         "Int", "String", "Bool", "None", "[]",
         "false", "true"

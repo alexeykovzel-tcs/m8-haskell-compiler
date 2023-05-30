@@ -1,84 +1,95 @@
 module Elaborator where
 
-import Parser (Script, Statement)
+import Parser
 import Data.Maybe
+import Data.Either
 import qualified Data.Map as Map
 
-data Context
-    = Scope [Context]
-    | LUT (Map.Map String Attr)
+-- Context contains the information about declared
+-- variables, structures, functions, etc. 
+-- Each scope knows about its upper (parent) scope
+data Context 
+    = Root LUT
+    | Scope Context LUT
 
-data Attr = 
-    | Variable  Type
-    | Function
-    | Struct
+type LUT = Map.Map String Attr
 
-data Type =
-    | String
-    | Array Type
-    | Integer
-    | Boolean
+data Attr 
+    = Var Type
+    | Fun [Type] Type
+    | Struct [Type]
+
+data Type 
+    = Str
+    | Arr Type Integer
+    | Int
+    | Bool
 
 data Error 
-    = TypeError String
+    = InvalidType String
+    | EmptyDecl
+    | OutOfBounds
 
-check :: Script -> Context
-check program = checkScript (Scope []) program
+elaborate :: Script -> Either Error Context
+elaborate script = checkScript (Root Map.empty) script
 
-checkScript :: Context -> Script -> Context
-checkScript [x:xs] = check (checkStmt x) xs
+checkScript :: Context -> Script -> Either Error Context
+checkScript ctx (x:xs) = case xAfter of
+    Left err -> Left err
+    Right newCtx -> checkScript newCtx xs
+    where xAfter = checkStmt ctx x
 
 checkStmt :: Context -> Statement -> Either Error Context
 
--- Not already declared
--- No type -> Has value (inferred type)
--- Has Type -> matches value
-checkStmt ctx (VarDecl def@(VarDef name type) expr)
-    | declared ctx name = Left $ TypeError $ "Tried to declare a variable twice: " ++ name
-    | isNothing type && isNothing expr = Left $ TypeError $ "..."
-    | isNothing type && isJust expr = -- infer type
-    | otherwise = Right $ insertLUT ctx name
+-- incomplete example which might help: 
 
--- Variable is declared
--- Value matches type
-checkStmt ctx (VarAssign name expr)
-    | declared ctx name = Right ctx
-    | otherwise = Left $ TypeError 
-        $ "Missing variable declaration" ++ name
+-- checkStmt ctx (VarDecl def@(VarDef name type) expr)
+--     | declared ctx name = Left $ InvalidType name
+--     | isNothing type && isNothing expr = Left EmptyDecl
+--     | isNothing type && isJust expr = -- infer type
+--     | otherwise = Right $ insert ctx (Var ...) name
 
--- type is array
--- matches value
-checkStmt ctx (ArrInsert name idx expr)
+-- Check: not already declared
+-- Check: no type -> has value (type is inferred)
+-- Check: has type -> matches value
+checkStmt ctx (VarDecl def@(VarDef name dataType) expr) = Right ctx
 
--- increase score
--- check script
+-- Check: variable is declared
+-- Check: value matches type
+checkStmt ctx (VarAssign name expr) = Right ctx
+
+-- Check: type is array
+-- Check: value matches type
+checkStmt ctx (ArrInsert name idx expr) = Right ctx
+
+-- Check: script contains return 
+-- Do: create score
+-- Do: elaborate script
+-- Do: add to context
+checkStmt ctx (FunDef name args returnType script) = Right ctx
+
 -- add to LUT
--- check if script contains return ??
-checkStmt ctx (FunDef name args returnType script) = 
+checkStmt ctx (StructDef name args) = Right ctx
 
--- add to LUT
-checkStmt ctx (StructDef name args) = 
+-- Check: iter type
+-- Do: elaborate script
+-- Do: add idx to LUT
+checkStmt ctx (ForLoop idx iter script) = Right ctx
 
--- check iter types
--- check script types
--- add idx to LUT
-checkStmt ctx (ForLoop idx iter script) = 
+-- Check: expr is bool
+-- Do: elaborate script
+checkStmt ctx (WhileLoop expr script) = Right ctx
 
--- check that expr is bool
--- check script
-checkStmt ctx (WhileLoop expr script) = 
+-- Check: expr is bool
+checkStmt ctx (Condition expr ifScript elseScript) = Right ctx
 
--- check expr is bool
-checkStmt ctx (Condition expr ifScript elseScript) = 
+-- Check: function return matches expr
+checkStmt ctx (ReturnVal expr) = Right ctx
 
--- check if function return matches expr
-checkStmt ctx (ReturnVal expr) = 
+declared :: String -> Context -> Bool
+declared name (Scope upper lut) 
+    = Map.member name lut || declared name upper
 
--- check expr    
-checkStmt ctx (Action expr) = 
-
-declared :: Context -> String -> Bool
-declared = ...
-
-insertLUT :: Context -> String -> Context
-insertLUT = ...
+insert :: String -> Attr -> Context -> Context
+insert name attr (Scope upper lut)
+    = Scope upper (Map.insert name attr lut)
