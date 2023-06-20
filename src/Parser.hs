@@ -5,22 +5,23 @@ import Text.Parsec.Char
 import Data.Maybe
 import Lexer
 
-{-
-    -- Usage examples --
+-- TODO: Error handling.
+-- TODO: More testing.
 
-    parser statement    "let x: Int = 2 + 1";
-    parser statement    "for i: Int in [1, 2, 3] { print(i); }"
-    parser expr         "2 * (3 + 4) / 6"
--}
+-----------------------------------------------------------------------------
+-- parser usage
+-----------------------------------------------------------------------------
 
-parser :: Parser a -> String -> a
-parser p xs = either (error . show) id result
-  where result = parse p "" xs
+-- tryParse statement    "let x: Int = 2 + 1";
+-- tryParse statement    "for i: Int in [1, 2, 3] { print(i); }"
+-- tryParse expr         "2 * (3 + 4) / 6"
 
+tryParse :: Parser a -> String -> a
+tryParse p xs = either (error . show) id $ parse p "" xs
 
-{------------------------}
-{-        @SCRIPT       -}
-{------------------------}
+-----------------------------------------------------------------------------
+-- statement parsers
+-----------------------------------------------------------------------------
 
 type Script = [Statement]
 
@@ -47,14 +48,14 @@ script :: Parser Script
 script = whiteSpace *> many statement
 
 statement :: Parser Statement
-statement 
-    =   varDecl             -- e.g. let x: Int;
-    <|> try varAssign     -- e.g. x = 3 + y;
-    <|> try arrInsert     -- e.g. arr[2] = x + 3;
-    <|> funDef              -- e.g. fun increment(x: Int) { ... }
-    <|> structDef           -- e.g. for x: Int in 2..10 { ... }
+statement =   
+        varDecl             -- e.g. let x: Int;
+    <|> try varAssign       -- e.g. x = 3 + y;
+    <|> try arrInsert       -- e.g. arr[2] = x + 3;
+    <|> funDef              -- e.g. fun increment(x: Int) { }
+    <|> structDef           -- e.g. for x: Int in 2..10 { }
     <|> forLoop             -- e.g. while x < 3 { print(x); }
-    <|> whileLoop           -- e.g. if x < y { ... } else { ... }
+    <|> whileLoop           -- e.g. if x < y { } else { }
     <|> condition           -- e.g. struct Person { first_name: String }
     <|> returnVal           -- e.g. return x;
     <|> action              -- e.g. print(x);
@@ -96,8 +97,8 @@ forLoop = ForLoop
     <*> braces script
 
 loopIter :: Parser LoopIter
-loopIter
-    =   IterRange   <$> intVal <* symbol ".." <*> intVal
+loopIter =   
+        IterRange   <$> intVal <* symbol ".." <*> intVal
     <|> IterArr     <$> arrVal
     <|> IterVar     <$> name
 
@@ -129,10 +130,9 @@ action = Action
     <$> expr 
     <*  semi
 
-
-{------------------------}
-{-     @EXPRESSIONS     -}
-{------------------------}
+-----------------------------------------------------------------------------
+-- expression parsers
+-----------------------------------------------------------------------------
 
 data Expr
     = FunCall       String [Expr]
@@ -166,15 +166,13 @@ ternary = Ternary
 
 operation :: Parser Expr
 operation = logicand `chainl1` op
-    where op 
-            =   (Both       <$ reservedOp "&&") 
-            <|> (OneOf      <$ reservedOp "||")
+    where op =  (Both   <$ reservedOp "&&") 
+            <|> (OneOf  <$ reservedOp "||")
 
 -- logicand && logicand || logicand 
 logicand :: Parser Expr
 logicand = comparand `chainl1` op
-    where op 
-            =   (Eq         <$ reservedOp "==")
+    where op =  (Eq         <$ reservedOp "==")
             <|> (MoreOrEq   <$ reservedOp ">=")
             <|> (LessOrEq   <$ reservedOp "<=")
             <|> (More       <$ reservedOp ">")
@@ -183,22 +181,20 @@ logicand = comparand `chainl1` op
 -- comparand == comparand 
 comparand :: Parser Expr
 comparand = term `chainl1` op
-    where op 
-            =   (Add        <$ reservedOp "+")
-            <|> (Sub        <$ reservedOp "-")
+    where op =  (Add    <$ reservedOp "+")
+            <|> (Sub    <$ reservedOp "-")
 
 -- term + term - term
 term :: Parser Expr
 term = factor `chainl1` op
-    where op 
-            =   (Mult       <$ reservedOp "*")
-            <|> (Div        <$ reservedOp "/")
-            <|> (Mod        <$ reservedOp "%")
+    where op =  (Mult   <$ reservedOp "*")
+            <|> (Div    <$ reservedOp "/")
+            <|> (Mod    <$ reservedOp "%")
 
 -- factor * factor / factor
 factor :: Parser Expr
-factor 
-    =   Fixed <$> val
+factor = 
+        Fixed <$> val
     <|> try lambda          -- e.g. (x: Int) -> { ... }
     <|> parens expr         -- e.g. (2 + 3)
     <|> try funCall         -- e.g. print("Hello")
@@ -213,17 +209,17 @@ lambda = Lambda
 
 funCall :: Parser Expr
 funCall = FunCall 
-    <$> name <*> parens args
+    <$> name 
+    <*> parens args
 
 structDecl :: Parser Expr
 structDecl = StructDecl 
     <$> name
     <*> braces args
 
-
-{------------------------}
-{-        @VALUES       -}
-{------------------------}
+-----------------------------------------------------------------------------
+-- value parsers
+-----------------------------------------------------------------------------
 
 data VarDef 
     = VarDef String (Maybe DataType)
@@ -246,8 +242,8 @@ data DataType
     deriving Show
 
 baseType :: Parser DataType
-baseType 
-    =   StrType     <$  reserved "String"
+baseType = 
+        StrType     <$  reserved "String"
     <|> BoolType    <$  reserved "Bool"
     <|> IntType     <$  reserved "Int"
     <|> StructType  <$> name
@@ -269,34 +265,28 @@ varDef = VarDef
         <|> pure Nothing)
 
 val :: Parser Val
-val 
-    =   Int     <$> intVal
+val =   Int     <$> intVal
     <|> Str     <$> strVal
     <|> Arr     <$> arrVal
     <|> Bool    <$> boolVal
     <|> None    <$  reserved "None"
 
 strVal :: Parser String
-strVal = between (char '"') (char '"') (many strChar)
+strVal = between (char '"') (char '"') (many strChr)
     where 
-        strChar = escapeChar <|> noneOf "\"\\"
-        escapeChar = char '\\' *> oneOf "\"\\"
+        strChr = escapeChr <|> noneOf "\"\\"
+        escapeChr = char '\\' *> oneOf "\"\\"
 
 arrVal :: Parser [Val]
 arrVal = brackets $ val `sepBy` comma
 
 boolVal :: Parser Bool
-boolVal
-    =   False       <$ reserved "false"
-    <|> True        <$ reserved "true"
+boolVal = False   <$ reserved "false"
+      <|> True    <$ reserved "true"
 
--- nameUse :: Parser NameUse
--- nameUse = (,) <$> name <*> getPosition
-
-
-{------------------------}
-{-         @ARGS        -}
-{------------------------}
+-----------------------------------------------------------------------------
+-- argument parsers
+-----------------------------------------------------------------------------
 
 type ArgsDef = [VarDef]
 

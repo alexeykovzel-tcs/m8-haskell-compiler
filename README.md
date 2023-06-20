@@ -1,4 +1,4 @@
-## Parser
+## Parser usage
 
 To test parser manually, run:
 
@@ -8,10 +8,8 @@ ghci -i:src src/Main.hs
 
 Then, use can try the following:
 
-```
-parser statement "let x: Int = 2 + 1";
-
-parser statement "for i: Int in [1, 2, 3] { print(i); }"
-
-parser expr "2 * (3 + 4) / 6"
+```bash
+tryParse statement "let x: Int = 2 + 1";
+tryParse statement "for i: Int in [1, 2, 3] { print(i); }"
+tryParse expr "2 * (3 + 4) / 6"
 ```

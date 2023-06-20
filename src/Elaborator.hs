@@ -6,9 +6,8 @@ import Data.Either
 import Text.Parsec.Pos
 import qualified Data.Map as Map
 
--- Context contains the information about declared
--- variables, structures, functions, etc. 
--- Each scope knows about its upper (parent) scope
+-- Context contains the information about declared variables, structures, 
+-- functions, etc. Each scope knows about its upper (parent) scope.
 data Context 
     = Scope Context LUT
     | Null
@@ -24,8 +23,8 @@ data Error
     = InvalidType   SourcePos String    -- applying operation to an invalid type
     | DupDecl       SourcePos String    -- duplicate entity declaration
     | MissingDecl   SourcePos String    -- calling non-existent entity
-    | EmptyDecl     SourcePos String    -- declaring a variable with no type and value
-    | NoReturn      SourcePos           -- declaring a function without return
+    | EmptyDecl     SourcePos String    -- variable decl. with no type and value
+    | NoReturn      SourcePos           -- function decl. without return
 
 elaborate :: Script -> Either Error Context
 elaborate script = checkScript (Scope Null Map.empty) script
@@ -83,10 +82,9 @@ checkStmt ctx stmt@(Condition expr ifScript elseScript) = Right ctx
 -- Check: function return type matches expr
 checkStmt ctx stmt@(ReturnVal expr) = Right ctx
 
-
-{------------------------}
-{-       @HELPERS       -}
-{------------------------}
+-----------------------------------------------------------------------------
+-- helper functions
+-----------------------------------------------------------------------------
 
 -- Returns true if an entity with such name 
 -- existing in the context

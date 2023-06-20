@@ -4,12 +4,16 @@ import qualified Text.ParserCombinators.Parsec.Token as Token
 import Text.ParserCombinators.Parsec.Language
 import Text.ParserCombinators.Parsec
 
+-----------------------------------------------------------------------------
+-- language definition
+-----------------------------------------------------------------------------
+
 languageDef = emptyDef {
     Token.reservedOpNames = [
-        "&&", "||",                         -- Logicands
-        "==", ">=", "<=", ">", "<",         -- Comparands
-        "+", "-",                           -- Terms
-        "*", "/", "%"                       -- Factors
+        "&&", "||",                     -- logicand operators
+        "==", ">=", "<=", ">", "<",     -- comparand operators
+        "+", "-",                       -- term operators
+        "*", "/", "%"                   -- factor operators
     ],
     Token.reservedNames   = [ 
         "let", "struct", "fun", 
@@ -25,6 +29,10 @@ languageDef = emptyDef {
 }
 
 lexer = Token.makeTokenParser languageDef
+
+-----------------------------------------------------------------------------
+-- basic parsers
+-----------------------------------------------------------------------------
 
 parens :: Parser a -> Parser a
 parens = Token.parens lexer
