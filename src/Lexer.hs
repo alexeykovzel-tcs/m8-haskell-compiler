@@ -58,8 +58,8 @@ semi = Token.semi lexer
 colon :: Parser String
 colon = Token.colon lexer
 
-intVal :: Parser Integer
-intVal = Token.integer lexer
+integer :: Parser Integer
+integer = Token.integer lexer
 
 reserved :: String -> Parser ()
 reserved = Token.reserved lexer

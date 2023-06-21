@@ -10,7 +10,7 @@ packages:
 
 # Dependency packages to be pulled from upstream that are not in the resolver.
 # These entries can reference officially published versions as well as
-# forks / in-progress versions pinned to a git hash. For example:
+# forks / in-progress versions pinned to a git hash.
 extra-deps:
 - github: bobismijnnaam/sprockell
   commit: 6b2e4a679421e5a9a7cacbdf5a0c427154c19590
