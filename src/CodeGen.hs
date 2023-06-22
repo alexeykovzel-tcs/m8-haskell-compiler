@@ -3,8 +3,7 @@ module CodeGen ( compile ) where
 import Sprockell
 import Parser
 
--- Sprockell instructions, memory types, etc.:
--- https://github.com/bobismijnnaam/sprockell/blob/master/src/Sprockell/HardwareTypes.hs#L115
+regs = [regB, regC, regD, regE, regF]
 
 compileExpr :: Expr -> [Instruction]
 compileExpr (FunCall name args) = []
@@ -42,36 +41,3 @@ compileExpr (Mod expr1 expr2) = []
 compileExpr (Var name) = []
 
 compileExpr (Fixed val) = []
-
------------------------------------------------------------------------------
--- register allocation
------------------------------------------------------------------------------
-
-regs = [regA, regB, regC, regD, regE, regF]
-
--- reg0         always zero
--- regSprID     contains the sprockellID
--- regSP        stack pointer
--- regPC        program counter
-
------------------------------------------------------------------------------
--- examples
------------------------------------------------------------------------------
-
--- computes fibonacci sequence
-compileFib :: Integer -> [Instruction]
-compileFib n = [ 
-        Load (ImmValue $ fromInteger n) regE,
-        Load (ImmValue 0) regA,
-        Load (ImmValue 1) regB,
-        Compute Gt regA regE regC,
-        Branch regC (Abs 12),
-        WriteInstr regA numberIO,
-        Compute Add regA regB regA,
-        Compute Gt regB regE regC,
-        Branch regC (Abs 12),
-        WriteInstr regB numberIO,
-        Compute Add regA regB regB,
-        Jump (Rel (-8)),
-        EndProg
-    ]

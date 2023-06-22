@@ -103,9 +103,10 @@ forLoop = ForLoop
     <*> braces script
 
 loopIter :: Parser LoopIter
-loopIter = IterRange <$> integer <* symbol ".." <*> integer
-       <|> IterArr   <$> array
-       <|> IterVar   <$> name
+loopIter = 
+        IterRange <$> integer <* symbol ".." <*> integer
+    <|> IterArr   <$> array
+    <|> IterVar   <$> name
 
 whileLoop :: Parser Statement
 whileLoop = WhileLoop
