@@ -1,4 +1,14 @@
-module Parser where
+module Parser (
+    Script,
+    Statement,
+    LoopIter,
+    Expr,
+    DataType,
+    Value,
+    VarDef,
+    ArgsDef,
+    tryParse
+) where
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
