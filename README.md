@@ -1,9 +1,17 @@
+## Sprockell
+
+To run a program in sprockell:
+
+```haskell
+run [program]
+```
+
 ## Parser usage
 
 To test parser manually, run:
 
 ```bash
-ghci -i:src src/Main.hs
+ghci -i:src src/Parser.hs
 ```
 
 Then, use can try the following:
