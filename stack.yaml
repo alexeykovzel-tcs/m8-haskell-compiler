@@ -1,16 +1,12 @@
-# Resolver to choose a 'specific' stackage snapshot or a compiler version.
-# A snapshot resolver dictates the compiler version and the set of packages
-# to be used for project dependencies.
+# Resolver decides package versions
 resolver:
-  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/26.yaml
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/4.yaml
 
-# User packages to be built.
+# User packages to be built
 packages:
 - .
 
-# Dependency packages to be pulled from upstream that are not in the resolver.
-# These entries can reference officially published versions as well as
-# forks / in-progress versions pinned to a git hash.
+# Pull Sprockell lib from GitHub
 extra-deps:
 - github: bobismijnnaam/sprockell
-  commit: 6b2e4a679421e5a9a7cacbdf5a0c427154c19590
+  commit: 3872ca567673f994170f49bbf7b1eaadf999af10

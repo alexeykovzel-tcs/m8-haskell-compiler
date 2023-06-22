@@ -46,7 +46,7 @@ checkStmt :: Context -> Statement -> Either Error Context
 -- Check: not already declared
 -- Check: no type -> has value (type is inferred)
 -- Check: has type -> matches value
-checkStmt ctx stmt@(VarDecl def@(VarDef name dataType) expr) = Right ctx
+checkStmt ctx stmt@(VarDecl def expr) = Right ctx
 
 -- Check: variable is declared
 -- Check: expr matches type

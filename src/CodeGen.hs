@@ -1,6 +1,6 @@
 module CodeGen ( compile ) where
 
-import Sprockell
+import Sprockell.HardwareTypes
 
 -- Sprockell instructions, memory types, etc.:
 -- https://github.com/bobismijnnaam/sprockell/blob/master/src/Sprockell/HardwareTypes.hs#L115
