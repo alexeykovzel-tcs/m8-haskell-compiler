@@ -1,6 +1,8 @@
 module Parser (
     StructName, FunName, VarName,
-    Script, Statement(..), Expr(..),
+    Script, Statement(..), Expr(..), Value(..),
+    script, statement, expr,
+    tryParse
 ) where
 
 import Text.ParserCombinators.Parsec
@@ -141,8 +143,8 @@ data Expr
     | Both          Expr Expr
     | OneOf         Expr Expr
     | Eq            Expr Expr
-    | MoreOrEq      Expr Expr
-    | LessOrEq      Expr Expr
+    | MoreEq        Expr Expr
+    | LessEq        Expr Expr
     | More          Expr Expr
     | Less          Expr Expr
     | Add           Expr Expr
@@ -171,11 +173,11 @@ operation = logicand `chainl1` op
 -- logicand && logicand || logicand 
 logicand :: Parser Expr
 logicand = comparand `chainl1` op
-    where op = (Eq       <$ reservedOp "==")
-           <|> (MoreOrEq <$ reservedOp ">=")
-           <|> (LessOrEq <$ reservedOp "<=")
-           <|> (More     <$ reservedOp ">")
-           <|> (Less     <$ reservedOp "<")
+    where op = (Eq      <$ reservedOp "==")
+           <|> (MoreEq  <$ reservedOp ">=")
+           <|> (LessEq  <$ reservedOp "<=")
+           <|> (More    <$ reservedOp ">")
+           <|> (Less    <$ reservedOp "<")
 
 -- comparand == comparand 
 comparand :: Parser Expr
