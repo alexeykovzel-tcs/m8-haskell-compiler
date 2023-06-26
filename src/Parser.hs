@@ -1,13 +1,6 @@
 module Parser (
-    Script,
-    Statement,
-    LoopIter,
-    Expr,
-    DataType,
-    Value,
-    VarDef,
-    ArgsDef,
-    tryParse
+    StructName, FunName, VarName,
+    Script, Statement(..), Expr(..),
 ) where
 
 import Text.ParserCombinators.Parsec
@@ -33,14 +26,18 @@ tryParse p xs = either (error . show) id $ parse p "" xs
 -- statement parsers
 -----------------------------------------------------------------------------
 
+type StructName = String
+type FunName = String
+type VarName = String
+
 type Script = [Statement]
 
 data Statement
     = VarDecl       VarDef (Maybe Expr)
-    | VarAssign     String Expr
-    | ArrInsert     String Integer Expr
-    | FunDef        String ArgsDef (Maybe DataType) Script
-    | StructDef     String ArgsDef
+    | VarAssign     VarName Expr
+    | ArrInsert     VarName Integer Expr
+    | FunDef        FunName ArgsDef (Maybe DataType) Script
+    | StructDef     StructName ArgsDef
     | ForLoop       VarDef LoopIter Script
     | WhileLoop     Expr Script
     | Condition     Expr Script (Maybe Script)
@@ -51,7 +48,7 @@ data Statement
 data LoopIter
     = IterRange     Integer Integer
     | IterArr       [Value]
-    | IterVar       String
+    | IterVar       VarName
     deriving Show
 
 script :: Parser Script
@@ -137,8 +134,8 @@ action = Action <$> expr <*  semi
 -----------------------------------------------------------------------------
 
 data Expr
-    = FunCall       String [Expr]
-    | StructDecl    String [Expr]
+    = FunCall       FunName [Expr]
+    | StructDecl    StructName [Expr]
     | Ternary       Expr Expr Expr
     | Lambda        ArgsDef Script
     | Both          Expr Expr
@@ -151,9 +148,7 @@ data Expr
     | Add           Expr Expr
     | Sub           Expr Expr
     | Mult          Expr Expr
-    | Div           Expr Expr
-    | Mod           Expr Expr
-    | Var           String
+    | Var           VarName
     | Fixed         Value
     deriving Show
 
@@ -192,8 +187,6 @@ comparand = term `chainl1` op
 term :: Parser Expr
 term = factor `chainl1` op
     where op = (Mult <$ reservedOp "*")
-           <|> (Div  <$ reservedOp "/")
-           <|> (Mod  <$ reservedOp "%")
 
 -- factor * factor / factor
 factor :: Parser Expr
@@ -224,12 +217,14 @@ structDecl = StructDecl
 -- data type parsers
 -----------------------------------------------------------------------------
 
+type ArrSize = Integer
+
 data DataType
     = StrType
     | BoolType
     | IntType
-    | StructType String                 -- struct name
-    | ArrType DataType (Maybe Integer)  -- type + size
+    | StructType StructName
+    | ArrType DataType (Maybe ArrSize)
     deriving Show
 
 dataType :: Parser DataType
@@ -278,7 +273,7 @@ boolean = False <$ reserved "false"
 -- other parsers
 -----------------------------------------------------------------------------
 
-type VarDef = (String, Maybe DataType)
+type VarDef = (VarName, Maybe DataType)
 
 type ArgsDef = [VarDef]
 
