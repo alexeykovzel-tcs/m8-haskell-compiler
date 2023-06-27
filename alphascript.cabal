@@ -16,6 +16,7 @@ extra-source-files:
 library
   exposed-modules:
       CodeGen
+      CodeGenTest
       Elaborator
       Lexer
       Main
@@ -37,6 +38,7 @@ executable alphascript-exe
   main-is: Main.hs
   other-modules:
       CodeGen
+      CodeGenTest
       Elaborator
       Lexer
       Parser

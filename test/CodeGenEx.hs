@@ -1,4 +1,4 @@
-module Test.CodeGen where
+module Ex.CodeGen where
 
 import Sprockell
 import Data.Char

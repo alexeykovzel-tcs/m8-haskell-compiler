@@ -1,20 +1,94 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module CodeGen (compile) where
+module CodeGen where
 
 import Sprockell
 import Elaborator
 import Data.Maybe
+import Data.Char
 import Parser (VarName)
 import qualified Parser as AST
 import qualified Data.Map as Map
 
 data Context = Ctx {
-    scope    :: Scope, 
-    funMap   :: FunMap,
-    varMap   :: VarMap, 
-    freeRegs :: [RegAddr]
+    scope :: Scope,          -- current scope 
+    funMap :: FunMap,        -- maps function names to ASTs
+    varMap :: VarMap,        -- maps variables to coords by scope
+    freeRegs  :: [RegAddr]   -- currently free registers
 }
+
+-----------------------------------------------------------------------------
+-- script compilation
+-----------------------------------------------------------------------------
+
+compile :: Context -> AST.Script -> [Instruction]
+compile ctx prog = preCompile ++ compileRec ctx prog 
+
+-- TODO: Build "main" activation record
+preCompile :: [Instruction]
+preCompile = [Load (ImmValue 0) regArp]
+
+compileRec :: Context -> AST.Script -> [Instruction]
+compileRec ctx [] = [EndProg]
+compileRec ctx (x:xs) = (compileStmt ctx x) ++ (compileRec ctx xs)
+
+compileStmt :: Context -> AST.Statement -> [Instruction]
+compileStmt ctx stmt = case stmt of
+    AST.VarDecl (name, _) Nothing      -> []
+    AST.VarDecl (name, _) (Just expr)  -> compileVar ctx name expr
+    AST.VarAssign name expr            -> compileVar ctx name expr
+    AST.Action expr                    -> compileExpr ctx2 expr reg2
+    where 
+        (reg2, ctx2) = occupyReg ctx
+
+compileVar :: Context -> VarName -> AST.Expr -> [Instruction]
+compileVar ctx name expr = exprToReg ++ varToMem
+    where 
+        (reg2, ctx2) = occupyReg ctx
+        exprToReg = compileExpr ctx2 expr reg2
+        varToMem = updateVar ctx2 name reg2
+
+-----------------------------------------------------------------------------
+-- expression compilation
+-----------------------------------------------------------------------------
+
+compileExpr :: Context -> AST.Expr -> RegAddr -> [Instruction]
+compileExpr ctx expr reg = case expr of
+
+    -- binary operations
+    AST.Mult    e1 e2 -> compileBin ctx e1 e2 reg Mul
+    AST.Add     e1 e2 -> compileBin ctx e1 e2 reg Add
+    AST.Sub     e1 e2 -> compileBin ctx e1 e2 reg Sub
+    AST.Eq      e1 e2 -> compileBin ctx e1 e2 reg Equal
+    AST.MoreEq  e1 e2 -> compileBin ctx e1 e2 reg GtE
+    AST.LessEq  e1 e2 -> compileBin ctx e1 e2 reg LtE
+    AST.More    e1 e2 -> compileBin ctx e1 e2 reg Gt
+    AST.Less    e1 e2 -> compileBin ctx e1 e2 reg Lt
+    AST.Both    e1 e2 -> compileBin ctx e1 e2 reg And
+    AST.OneOf   e1 e2 -> compileBin ctx e1 e2 reg Or
+
+    -- load variable from memory
+    AST.Var name -> loadVar ctx name reg
+
+    -- put integer to a register
+    AST.Fixed (AST.Int val) -> 
+        [Load (ImmValue $ fromInteger val) reg]
+
+    AST.FunCall "printHello" _ -> writeString ctx "Hello, World!\n"
+    AST.FunCall "print" (e:es) -> compileExpr ctx e reg 
+        ++ [WriteInstr reg numberIO]
+
+-----------------------------------------------------------------------------
+
+compileBin :: Context -> AST.Expr -> AST.Expr 
+           -> RegAddr -> Operator -> [Instruction]
+
+compileBin ctx e1 e2 reg op = 
+    c1 ++ c2 ++ [Compute op reg reg2 reg]
+    where 
+        (reg2, ctx2) = occupyReg ctx
+        c1 = compileExpr ctx e1 reg
+        c2 = compileExpr ctx2 e2 reg2
 
 -----------------------------------------------------------------------------
 -- manipulations with variables
@@ -24,23 +98,27 @@ data Context = Ctx {
 loadVar :: Context -> VarName -> RegAddr -> [Instruction]
 loadVar ctx name reg = arpToReg ++ valToReg
     where 
-        (arpToReg, offset) = varArp ctx name reg
-        valToReg = loadAI ctx reg offset reg
+        (depth, offset) = varCoord ctx name
+        (reg2, ctx2) = occupyReg ctx
+        arpToReg = depthArp ctx2 depth reg2
+        valToReg = loadAI ctx2 reg2 offset reg
 
 -- updates a variable in memory
 updateVar :: Context -> VarName -> RegAddr -> [Instruction]
-updateVar ctx name reg = arpToReg ++ valToMem
+updateVar ctx name reg = arpToReg ++ varToMem
     where
-        (regTemp, newCtx) = occupyReg ctx
-        (arpToReg, offset) = varArp newCtx name regTemp
-        valToMem = storeAI newCtx regTemp offset (IndAddr regTemp)
-
--- finds an ARP from which the variable offsets
-varArp :: Context -> VarName -> RegAddr -> ([Instruction], Offset)
-varArp ctx name reg = (argToReg, offset)
-    where
-        argToReg = loadArp ctx (depth - scopeDepth) reg
         (depth, offset) = varCoord ctx name
+        (reg2, ctx2) = occupyReg ctx
+        arpToReg = depthArp ctx2 depth reg2
+        varToMem = storeAI ctx2 reg reg2 offset
+
+-----------------------------------------------------------------------------
+
+-- finds ARP at a certain depth
+depthArp :: Context -> Depth -> RegAddr -> [Instruction]
+depthArp ctx depth reg = loadArp ctx depthDiff reg
+    where 
+        depthDiff = depth - scopeDepth
         (_, scopeDepth) = scope ctx
 
 -- finds a variable coordinate in memory
@@ -52,146 +130,33 @@ varCoord (Ctx (scopeId, _) _ varMap _) name = varCoord
 
 -- loads an ARP by a depth difference
 loadArp :: Context -> Depth -> RegAddr -> [Instruction]
-loadArp _ 0 reg        = [Compute Add reg0 regArp reg]
-loadArp ctx 1 reg      = loadAI ctx regArp (-4) reg
-loadArp ctx depth reg  = upperArps ++ arp
+loadArp _   0     reg = [Compute Add reg0 regArp reg]
+loadArp ctx 1     reg = loadAI ctx regArp (-1) reg
+loadArp ctx depth reg = upperArps ++ prevArp
     where 
         upperArps = loadArp ctx (depth - 1) reg
-        arp = loadAI ctx reg (-4) reg
+        prevArp = loadAI ctx reg (-1) reg
 
 -----------------------------------------------------------------------------
 -- register management
 -----------------------------------------------------------------------------
 
-{-
-    reg0         always zero
-    regSprID     contains the sprockellID
-    regSP        stack pointer
-    regPC        program counter
--}
+-- reg0         always zero
+-- regSprID     contains the sprockellID
+-- regSP        stack pointer
+-- regPC        program counter
 
--- register containing ARP
+-- Reserve register A for ARP
 regArp = regA
 
--- registers for free use
+-- registers for free usage
 userRegs = [regB, regC, regD, regE, regF]
-
-freeReg :: Context -> RegAddr
-freeReg ctx = let (r:_) = freeRegs ctx in r
 
 occupyReg :: Context -> (RegAddr, Context)
 occupyReg (Ctx s f v (r:rs)) = (r, Ctx s f v rs)
 
------------------------------------------------------------------------------
--- expression compilation
------------------------------------------------------------------------------
-
-class Compilable a where
-    compile :: Context -> a -> [Instruction]
-
-type ExprToReg = (AST.Expr, RegAddr)
-
-instance Compilable AST.Expr where
-    compile ctx expr = compile ctx (expr, reg)
-        where reg = freeReg ctx
-
-instance Compilable ExprToReg where
-
-    -- Only works with integers for now
-    compile ctx (AST.Fixed (AST.Int val), reg) 
-        = [Load (ImmValue $ fromInteger val) reg]
-
-    -- loading a variable
-    compile ctx (AST.Var name, reg) = loadVar ctx name reg
-
-    -- binary operations
-    compile ctx (AST.Mult    e1 e2, reg) = compile ctx (e1, e2, Mul,   reg) 
-    compile ctx (AST.Add     e1 e2, reg) = compile ctx (e1, e2, Add,   reg) 
-    compile ctx (AST.Sub     e1 e2, reg) = compile ctx (e1, e2, Sub,   reg) 
-    compile ctx (AST.Eq      e1 e2, reg) = compile ctx (e1, e2, Equal, reg) 
-    compile ctx (AST.MoreEq  e1 e2, reg) = compile ctx (e1, e2, GtE,   reg) 
-    compile ctx (AST.LessEq  e1 e2, reg) = compile ctx (e1, e2, LtE,   reg) 
-    compile ctx (AST.More    e1 e2, reg) = compile ctx (e1, e2, Gt,    reg) 
-    compile ctx (AST.Less    e1 e2, reg) = compile ctx (e1, e2, Lt,    reg) 
-    compile ctx (AST.Both    e1 e2, reg) = compile ctx (e1, e2, And,   reg) 
-    compile ctx (AST.OneOf   e1 e2, reg) = compile ctx (e1, e2, Or,    reg) 
-
-    -- compile ctx (AST.FunCall name args, reg) = []
-    -- compile ctx (AST.StructDecl name args, reg) = []
-    -- compile ctx (AST.Ternary cond e1 e2, reg) = []
-    -- compile ctx (AST.Lambda args script, reg) = []
-
-type BinToReg = (AST.Expr, AST.Expr, Operator, RegAddr)
-
-instance Compilable BinToReg where
-    compile ctx (expr1, expr2, op, reg) 
-        = left ++ right ++ computeOp
-        where 
-            left = compile ctx (expr1, reg)
-            right = compile newCtx (expr2, regTemp)
-            computeOp = [Compute op reg regTemp reg]
-            (regTemp, newCtx) = occupyReg ctx
-
------------------------------------------------------------------------------
--- script compilation
------------------------------------------------------------------------------
-
-instance Compilable AST.Script where
-    compile ctx [] = [EndProg]
-    compile ctx (x:xs) = (compile ctx x) ++ (compile ctx xs)
-
-instance Compilable AST.Statement where
-    compile ctx (AST.VarDecl (name, _) Nothing)      = []
-    compile ctx (AST.VarDecl (name, _) (Just expr))  = compile ctx (name, expr)
-    compile ctx (AST.VarAssign name expr)            = compile ctx (name, expr)
-    compile ctx (AST.Action expr)                    = compile ctx expr
-
-    -- compile ctx (Condition cond ifScript elseScript) = []
-    -- compile ctx (ForLoop i iter script) = []
-    -- compile ctx (WhileLoop expr script) = []
-    -- compile ctx (FunDef name args type script) = []
-    -- compile ctx (ReturnVal expr) = []
-    -- compile ctx (StructDef name args) = []
-    -- compile ctx (ArrInsert name size expr) = []
-
-type VarExpr = (AST.VarName, AST.Expr)
-
-instance Compilable VarExpr where
-    compile ctx (name, expr) = exprToReg ++ (updateVar newCtx name reg)
-        where 
-            exprToReg = compile newCtx (expr, reg) 
-            (reg, newCtx) = occupyReg ctx
-
------------------------------------------------------------------------------
--- testing
-
-mainCtx :: [(VarName, VarCoord)] -> Context
-mainCtx vars = Ctx (0, 1) funMap varMap regs
-    where
-        funMap = Map.empty
-        varMap = Map.fromList [(0, Map.fromList vars)]
-        regs = [regC, regD, regE, regF]
-
-runExpr :: String -> IO()
-runExpr str = run [prog ++ [WriteInstr regB numberIO, EndProg]]
-    where
-        expr = AST.tryParse AST.expr str
-        prog = compile (mainCtx []) (expr, regB)
-
-tryScript :: String -> [(VarName, VarCoord)] -> IO()
-tryScript str vars = do
-    putStrLn ""
-    mapM_ print result
-    putStrLn ""
-    where 
-        result = compile (mainCtx vars) ast
-        ast = AST.tryParse AST.script str
-
--- e.g. tryScript "let x = 2;" [("x", (1, 0))]
-
-showLocalMem :: DbgInput -> String
-showLocalMem (_, systemState) 
-    = show $ localMem $ head $ sprStates systemState
+freeReg :: Context -> RegAddr
+freeReg ctx = let (r:_) = freeRegs ctx in r
 
 -----------------------------------------------------------------------------
 -- helpers
@@ -205,11 +170,24 @@ loadAI ctx reg1 offset reg2 =
         Load (IndAddr reg2) reg2
     ]
 
-storeAI :: Context -> RegAddr -> Offset -> AddrImmDI -> [Instruction]
-storeAI ctx reg1 offset target =
+storeAI :: Context -> RegAddr -> RegAddr -> Offset -> [Instruction]
+storeAI ctx reg1 reg2 offset =
     [
-        Load (ImmValue offset) reg2,
-        Compute Add reg1 reg2 reg2,
-        Store reg2 target
+        Load (ImmValue offset) reg3,
+        Compute Add reg3 reg2 reg2,
+        Store reg1 (IndAddr reg2)
     ]
-    where reg2 = freeReg ctx
+    where reg3 = freeReg ctx
+
+-- Generate code to print a string
+writeString :: Context -> String -> [Instruction]
+writeString ctx str = concat $ map (writeChar reg) str
+    where reg = freeReg ctx
+
+-- Generate code to print a single character
+writeChar :: RegAddr -> Char -> [Instruction]
+writeChar reg c = 
+    [ 
+        Load (ImmValue $ ord c) reg, 
+        WriteInstr reg charIO 
+    ]
