@@ -41,51 +41,56 @@ compileStmt ctx stmt = case stmt of
     AST.Action expr                    -> compileExpr ctx2 expr reg2
     
     AST.WhileLoop expr script 
-        -> cond ++ reverseCond ++ branch ++ body ++ jumpBack
+        -> cond ++ notCond ++ branch ++ body ++ jumpBack
         where
-            cond        = compileExpr ctx2 expr reg2 
-            reverseCond = reverseBool ctx2 reg2
-            branch      = [Branch reg2 (Rel relSkip)]
-            body        = compileScript ctx script
-            jumpBack    = [Jump (Rel relBack)]
-            relSkip     = (length body) + 2
-            relBack     = - (length body) - (length branch) 
-                          - (length reverseCond) - (length cond)
+            cond      = compileExpr ctx2 expr reg2 
+            notCond   = reverseBool ctx2 reg2
+            branch    = [Branch reg2 $ Rel relSkip]
+            body      = compileScript ctx script
+            jumpBack  = [Jump $ Rel relBack]
+            relSkip   = (length body) + 2
+            relBack   = - (length body) - (length branch) 
+                        - (length notCond) - (length cond)
     
-    AST.ForLoop (i, _) (AST.IterRange from to) script 
+    AST.ForLoop (iter, _) (AST.IterRange from to) script 
         -> saveIter ++ loadIter ++ branch ++ body ++ incrIter ++ jumpBack
         where 
-            saveIter = updateVarI ctx i from
-            loadIter = loadVar ctx2 i reg2
-            branch   = [loadI to reg3,               -- load 'to'
-                        Compute Gt reg2 reg3 reg3,   -- check if 'i' > 'to'
-                        Branch reg3 (Rel relSkip)]   -- skip if true
-            body     = compileScript ctx script
-            incrIter = incrMem ctx i
-            jumpBack = [Jump (Rel relBack)]
-            reg3     = findReg ctx2
-            relSkip  = (length body) + (length incrIter) + 2
-            relBack  = - (length body) - (length incrIter) 
-                       - (length loadIter) - (length branch)
+            saveIter  = updateVarImm ctx iter from
+            loadIter  = loadVar ctx2 iter reg2
+            branch    = [loadImm to reg3,             -- load 'to'
+                         Compute Gt reg2 reg3 reg3,   -- check if 'i' > 'to'
+                         Branch reg3 $ Rel relSkip]   -- skip if true
+            body      = compileScript ctx script
+            incrIter  = incrMem ctx iter
+            jumpBack  = [Jump $ Rel relBack]
+            reg3      = findReg ctx2
+            relSkip   = (length body) + (length incrIter) + 2
+            relBack   = - (length body) - (length incrIter) 
+                        - (length loadIter) - (length branch)
 
     AST.Condition expr ifScript elseScript 
-        -> cond ++ reverseCond ++ branch ++ ifBody ++ elseBody
+        -> cond ++ notCond ++ branch ++ ifBody ++ elseBody
         where
-            cond        = compileExpr ctx2 expr reg2
-            reverseCond = reverseBool ctx2 reg2
-            ifBody      = compileScript ctx ifScript ++ skipElse
-            branch      = [Branch reg2 (Rel $ length ifBody + 1)]
-            elseBody    = maybe [] (compileScript ctx) elseScript
-            skipElse    = maybe [] (\_ -> jumpElse) elseScript
-            jumpElse    = [Jump (Rel $ length elseBody + 1)]
+            cond      = compileExpr ctx2 expr reg2
+            notCond   = reverseBool ctx2 reg2
+            branch    = [Branch reg2 $ Rel $ length ifBody + 1]
+            ifBody    = compileScript ctx ifScript ++ skipElse
+            elseBody  = maybe [] (compileScript ctx) elseScript
+            skipElse  = maybe [] (\_ -> jumpElse) elseScript
+            jumpElse  = [Jump $ Rel $ length elseBody + 1]
 
     -- TODO: Implement these:
-    AST.StructDef name args                 -> []
-    AST.FunDef name args returnType script  -> []
-    AST.ArrInsert name idx expr             -> []
-    AST.ReturnVal expr                      -> []
+    AST.FunDef name args returnType script -> []
+    AST.ReturnVal expr -> []
+    AST.StructDef name args -> []
+    AST.ArrInsert name idx expr -> []
 
     where (reg2, ctx2) = occupyReg ctx
+
+-----------------------------------------------------------------------------
+
+-- buildAR :: Context -> [(VarName, Maybe DataType)] -> Contexttrue
+-- buildAR ctx args = ctx
 
 compileVar :: Context -> VarName -> AST.Expr -> [Instruction]
 compileVar ctx name expr = exprToReg ++ varToMem
@@ -113,20 +118,33 @@ compileExpr ctx expr reg = case expr of
     AST.Both    e1 e2 -> compileBin ctx e1 e2 reg And
     AST.OneOf   e1 e2 -> compileBin ctx e1 e2 reg Or
 
-    -- load variable from memory
+    -- load variable value
     AST.Var name -> loadVar ctx name reg
 
     -- TODO: Arrays, String and None
     AST.Fixed (AST.Int  val)  -> [Load (ImmValue $ fromInteger val) reg]
     AST.Fixed (AST.Bool val)  -> [Load (ImmValue $ intBool val) reg]
-    AST.Fixed (AST.None)      -> []
+    AST.Fixed (AST.None)      -> [Load (ImmValue (-1)) reg]
     AST.Fixed (AST.Arr vals)  -> []
     AST.Fixed (AST.Text text) -> []
 
+    AST.Ternary expr e1 e2
+        -> cond ++ notCond ++ branch ++ ifBody ++ elseBody
+        where
+            cond      = compileExpr ctx expr reg
+            notCond   = reverseBool ctx reg
+            branch    = [Branch reg $ Rel $ length ifBody + 1]
+            ifBody    = compileExpr ctx e1 reg ++ jumpElse
+            elseBody  = compileExpr ctx e2 reg
+            jumpElse  = [Jump $ Rel $ length elseBody + 1]
+
     -- embedded functions
-    AST.FunCall "printHello" _ 
-        -> writeString ctx "Hello, World!\n"
-    
+    AST.FunCall "thread_create" ((AST.Fixed (AST.Int threadId)):_)
+        -> writeString ctx ("create thread: " ++ show threadId ++ "\n")
+
+    AST.FunCall "thread_join" ((AST.Fixed (AST.Int threadId)):_)
+        -> writeString ctx ("join thread: " ++ show threadId ++ "\n")
+ 
     AST.FunCall "print" ((AST.Fixed (AST.Text msg)):_)
         -> writeString ctx (msg ++ "\n")
 
@@ -137,7 +155,6 @@ compileExpr ctx expr reg = case expr of
     -- TODO: Implement this:
     AST.FunCall name args    -> []
     AST.StructDecl name args -> []
-    AST.Ternary cond e1 e2   -> []
     AST.Lambda args script   -> []
 
 -----------------------------------------------------------------------------
@@ -176,8 +193,8 @@ updateVar ctx name reg = arpToReg ++ varToMem
         varToMem = storeAI ctx2 reg reg2 offset
 
 -- updates a variable in memory by value
-updateVarI :: Context -> VarName -> Integer -> [Instruction]
-updateVarI ctx name val = (loadI val reg2) : (updateVar ctx2 name reg2)
+updateVarImm :: Context -> VarName -> Integer -> [Instruction]
+updateVarImm ctx name val = (loadImm val reg2) : (updateVar ctx2 name reg2)
     where (reg2, ctx2) = occupyReg ctx
 
 -----------------------------------------------------------------------------
@@ -229,8 +246,8 @@ findReg :: Context -> RegAddr
 findReg ctx = let (r:_) = freeRegs ctx in r
 
 -- loads value to a register 
-loadI :: Integer -> RegAddr -> Instruction
-loadI val reg = Load (ImmValue $ fromInteger val) reg
+loadImm :: Integer -> RegAddr -> Instruction
+loadImm val reg = Load (ImmValue $ fromInteger val) reg
 
 -- reverses boolean value in a register
 reverseBool :: Context -> RegAddr -> [Instruction]
@@ -248,7 +265,7 @@ incrMem ctx name = addMem ctx name 1
 addMem :: Context -> VarName -> Integer -> [Instruction]
 addMem ctx name val =
        loadVar ctx2 name reg2
-    ++ [loadI val reg3, Compute Add reg2 reg3 reg2] 
+    ++ [loadImm val reg3, Compute Add reg2 reg3 reg2] 
     ++ updateVar ctx2 name reg2
     where 
         (reg2, ctx2) = occupyReg ctx
