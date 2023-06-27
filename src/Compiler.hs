@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module CodeGen where
+module Compiler where
 
 import Sprockell
 import Elaborator
@@ -22,22 +22,44 @@ data Context = Ctx {
 -----------------------------------------------------------------------------
 
 compile :: Context -> AST.Script -> [Instruction]
-compile ctx prog = preCompile ++ compileRec ctx prog 
+compile ctx prog = preCompile ++ compileScript ctx prog ++ [EndProg]
 
 -- TODO: Build "main" activation record
 preCompile :: [Instruction]
 preCompile = [Load (ImmValue 0) regArp]
 
-compileRec :: Context -> AST.Script -> [Instruction]
-compileRec ctx [] = [EndProg]
-compileRec ctx (x:xs) = (compileStmt ctx x) ++ (compileRec ctx xs)
+compileScript :: Context -> AST.Script -> [Instruction]
+compileScript ctx [] = []
+compileScript ctx (x:xs) = (compileStmt ctx x) ++ (compileScript ctx xs)
 
 compileStmt :: Context -> AST.Statement -> [Instruction]
 compileStmt ctx stmt = case stmt of
-    AST.VarDecl (name, _) Nothing      -> []
-    AST.VarDecl (name, _) (Just expr)  -> compileVar ctx name expr
-    AST.VarAssign name expr            -> compileVar ctx name expr
-    AST.Action expr                    -> compileExpr ctx2 expr reg2
+    
+    AST.VarDecl (name, _) Nothing -> []
+    AST.VarDecl (name, _) (Just expr) -> compileVar ctx name expr
+    
+    AST.VarAssign name expr -> compileVar ctx name expr
+    
+    AST.Action expr -> compileExpr ctx2 expr reg2
+    
+    AST.StructDef name args -> []
+    
+    AST.FunDef name args returnType script -> []
+    
+    AST.Condition cond ifScript elseScript -> []
+    
+    AST.ArrInsert name idx expr -> []
+    
+    AST.WhileLoop cond script -> []
+    
+    -- AST.WhileLoop cond script 
+    --     -> compileExpr ctx2 cond reg2
+    --     ++ compileScript ctx2 script
+    
+    AST.ForLoop i iter script -> []
+    
+    AST.ReturnVal expr -> []
+    
     where 
         (reg2, ctx2) = occupyReg ctx
 
@@ -70,13 +92,23 @@ compileExpr ctx expr reg = case expr of
     -- load variable from memory
     AST.Var name -> loadVar ctx name reg
 
-    -- put integer to a register
-    AST.Fixed (AST.Int val) -> 
-        [Load (ImmValue $ fromInteger val) reg]
+    -- TODO: Implement this:
+    AST.FunCall name args    -> []
+    AST.StructDecl name args -> []
+    AST.Ternary cond e1 e2   -> []
+    AST.Lambda args script   -> []
 
+    -- TODO: Arrays, String and None
+    AST.Fixed (AST.Int  val)  -> [Load (ImmValue $ fromInteger val) reg]
+    AST.Fixed (AST.Bool val)  -> [Load (ImmValue $ intBool val) reg]
+    AST.Fixed (AST.None)      -> []
+    AST.Fixed (AST.Arr vals)  -> []
+    AST.Fixed (AST.Text text) -> []
+
+    -- embedded functions
     AST.FunCall "printHello" _ -> writeString ctx "Hello, World!\n"
-    AST.FunCall "print" (e:es) -> compileExpr ctx e reg 
-        ++ [WriteInstr reg numberIO]
+    AST.FunCall "print" (e:es) 
+        -> compileExpr ctx e reg ++ [WriteInstr reg numberIO]
 
 -----------------------------------------------------------------------------
 
@@ -91,7 +123,7 @@ compileBin ctx e1 e2 reg op =
         c2 = compileExpr ctx2 e2 reg2
 
 -----------------------------------------------------------------------------
--- manipulations with variables
+-- variable management
 -----------------------------------------------------------------------------
 
 -- loads variable data to a register
@@ -123,10 +155,10 @@ depthArp ctx depth reg = loadArp ctx depthDiff reg
 
 -- finds a variable coordinate in memory
 varCoord :: Context -> VarName -> VarCoord
-varCoord (Ctx (scopeId, _) _ varMap _) name = varCoord
+varCoord (Ctx (scopeId, _) _ varMap _) name = result
     where 
         scopeVarMap = fromJust $ Map.lookup scopeId varMap
-        varCoord    = fromJust $ Map.lookup name scopeVarMap
+        result    = fromJust $ Map.lookup name scopeVarMap
 
 -- loads an ARP by a depth difference
 loadArp :: Context -> Depth -> RegAddr -> [Instruction]
@@ -159,7 +191,7 @@ freeReg :: Context -> RegAddr
 freeReg ctx = let (r:_) = freeRegs ctx in r
 
 -----------------------------------------------------------------------------
--- helpers
+-- helper functions
 -----------------------------------------------------------------------------
 
 loadAI :: Context -> RegAddr -> Offset -> RegAddr -> [Instruction]
