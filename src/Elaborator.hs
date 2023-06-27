@@ -2,7 +2,6 @@ module Elaborator (
     Depth, Offset,
     ScopeID, Scope,
     Overview,
-    FunMap,
     VarMap,
     VarCoord,
     elaborate
@@ -20,10 +19,7 @@ type Depth = Int
 type ScopeID = Integer
 type Scope = (ScopeID, Depth)
 
-data Overview = Overview FunMap VarMap
-
--- used to generate code from a function call 
-type FunMap = Map.Map FunName Statement
+data Overview = Overview VarMap
 
 -- used to determine a variable position in memory
 type VarMap = Map.Map ScopeID (Map.Map VarName VarCoord)

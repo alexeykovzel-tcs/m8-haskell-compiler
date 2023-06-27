@@ -6,9 +6,12 @@ import Sprockell
 import Elaborator
 import Data.Maybe
 import Data.Char
-import Parser (VarName)
+import Parser (VarName, FunName)
 import qualified Parser as AST
 import qualified Data.Map as Map
+
+-- pointers to function labels
+type FunMap = Map.Map FunName CodeAddr
 
 data Context = Ctx {
     scope :: Scope,          -- current scope 
@@ -80,17 +83,13 @@ compileStmt ctx stmt = case stmt of
             jumpElse  = [Jump $ Rel $ length elseBody + 1]
 
     -- TODO: Implement these:
-    AST.FunDef name args returnType script -> []
-    AST.ReturnVal expr -> []
-    AST.StructDef name args -> []
-    AST.ArrInsert name idx expr -> []
+    -- AST.FunDef name args returnType script -> []
+    -- AST.ReturnVal expr -> []
+    -- AST.ArrInsert name idx expr -> []
 
     where (reg2, ctx2) = occupyReg ctx
 
 -----------------------------------------------------------------------------
-
--- buildAR :: Context -> [(VarName, Maybe DataType)] -> Contexttrue
--- buildAR ctx args = ctx
 
 compileVar :: Context -> VarName -> AST.Expr -> [Instruction]
 compileVar ctx name expr = exprToReg ++ varToMem
@@ -153,9 +152,8 @@ compileExpr ctx expr reg = case expr of
         ++ [WriteInstr reg numberIO]
 
     -- TODO: Implement this:
-    AST.FunCall name args    -> []
-    AST.StructDecl name args -> []
-    AST.Lambda args script   -> []
+    -- AST.FunCall name args -> []
+    -- AST.Lambda args script   -> []
 
 -----------------------------------------------------------------------------
 

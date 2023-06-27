@@ -6,7 +6,7 @@ cabal-version: 1.12
 
 name:           alphascript
 version:        0.1.0.0
-description:    This project is a compiler for a simple programming language designed for educational purposes, and may not be suitable for production use. While the language it compiles is simple, it covers fundamental concepts such as variables, control structures, and functions.
+description:    This project is a compiler for a simple programming language designed for educational purposes, and may not be suitable for production use. While the language it compiles is simple, it covers fundamental concepts such as variables and functions.
 author:         Group 22
 maintainer:     Group 22
 build-type:     Simple

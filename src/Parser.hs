@@ -1,5 +1,5 @@
 module Parser (
-    StructName, FunName, VarName,
+    FunName, VarName,
     Script, Statement(..), Expr(..), Value(..), LoopIter(..),
     script, statement, expr,
     tryParse
@@ -28,7 +28,6 @@ tryParse p xs = either (error . show) id $ parse p "" xs
 -- statement parsers
 -----------------------------------------------------------------------------
 
-type StructName = String
 type FunName = String
 type VarName = String
 
@@ -39,7 +38,6 @@ data Statement
     | VarAssign     VarName Expr
     | ArrInsert     VarName Integer Expr
     | FunDef        FunName ArgsDef (Maybe DataType) Script
-    | StructDef     StructName ArgsDef
     | ForLoop       VarDef LoopIter Script
     | WhileLoop     Expr Script
     | Condition     Expr Script (Maybe Script)
@@ -61,11 +59,10 @@ statement =
         varDecl         -- e.g. let x: Int;
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
-    <|> funDef          -- e.g. fun increment(x: Int) { }
-    <|> structDef       -- e.g. for x: Int in 2..10 { }
-    <|> forLoop         -- e.g. while x < 3 { print(x); }
-    <|> whileLoop       -- e.g. if x < y { } else { }
-    <|> condition       -- e.g. struct Person { first_name: String }
+    <|> funDef          -- e.g. fun increment(x: Int) -> Int { }
+    <|> forLoop         -- e.g. for x: Int in 2..10 { }
+    <|> whileLoop       -- e.g. while x < 3 { print(x); }
+    <|> condition       -- e.g. if x < y { } else { }
     <|> returnVal       -- e.g. return x;
     <|> action          -- e.g. print(x);
 
@@ -118,11 +115,6 @@ condition = Condition
     <*> braces script
     <*> nullable (reserved "else" *> braces script)
 
-structDef :: Parser Statement
-structDef = StructDef 
-    <$  reserved "struct" <*> name
-    <*> braces argsDef
-
 returnVal :: Parser Statement
 returnVal = ReturnVal
     <$  reserved "return" <*> expr
@@ -137,7 +129,6 @@ action = Action <$> expr <*  semi
 
 data Expr
     = FunCall       FunName [Expr]
-    | StructDecl    StructName [Expr]
     | Ternary       Expr Expr Expr
     | Lambda        ArgsDef Script
     | Both          Expr Expr
@@ -196,7 +187,6 @@ factor = Fixed <$> value
     <|> try lambda          -- e.g. (x: Int) -> { ... }
     <|> parens expr         -- e.g. (2 + 3)
     <|> try funCall         -- e.g. print("Hello")
-    <|> try structDecl      -- e.g. Person { "John" }
     <|> Var <$> name
 
 lambda :: Parser Expr
@@ -210,11 +200,6 @@ funCall = FunCall
     <$> name 
     <*> parens args
 
-structDecl :: Parser Expr
-structDecl = StructDecl 
-    <$> name
-    <*> braces args
-
 -----------------------------------------------------------------------------
 -- data type parsers
 -----------------------------------------------------------------------------
@@ -225,7 +210,6 @@ data DataType
     = StrType
     | BoolType
     | IntType
-    | StructType StructName
     | ArrType DataType (Maybe ArrSize)
     deriving Show
 
@@ -237,7 +221,6 @@ baseType :: Parser DataType
 baseType = StrType    <$  reserved "String"
        <|> BoolType   <$  reserved "Bool"
        <|> IntType    <$  reserved "Int"
-       <|> StructType <$> name
 
 -----------------------------------------------------------------------------
 -- value parsers

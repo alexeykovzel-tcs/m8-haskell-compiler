@@ -9,7 +9,7 @@ description:
   This project is a compiler for a simple programming language designed 
   for educational purposes, and may not be suitable for production use. 
   While the language it compiles is simple, it covers fundamental 
-  concepts such as variables, control structures, and functions.
+  concepts such as variables and functions.
 
 dependencies:
 - base
