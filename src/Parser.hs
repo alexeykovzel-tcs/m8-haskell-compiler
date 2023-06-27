@@ -1,6 +1,6 @@
 module Parser (
     StructName, FunName, VarName,
-    Script, Statement(..), Expr(..), Value(..),
+    Script, Statement(..), Expr(..), Value(..), LoopIter(..),
     script, statement, expr,
     tryParse
 ) where

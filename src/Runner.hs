@@ -3,6 +3,7 @@ module Runner where
 import Sprockell
 import Elaborator
 import Compiler
+import Data.Maybe
 import Control.Monad (join)
 import qualified Parser as AST
 import qualified Data.Map as Map
@@ -17,6 +18,9 @@ runFile file = join $ runProg <$> readFile file
 debugFile :: FilePath -> IO()
 debugFile file = join $ debugProg <$> readFile file
 
+printFileASM :: FilePath -> IO()
+printFileASM file = join $ printASM <$> readFile file
+
 runProg :: String -> IO()
 runProg str = run [strToProg str]
 
@@ -25,8 +29,8 @@ debugProg str = runWithDebugger
     (debuggerSimplePrint showLocalMem) 
     [strToProg str]
 
-disassemble :: String -> IO()
-disassemble str = do
+printASM :: String -> IO()
+printASM str = do
     putStrLn ""
     mapM_ print (strToProg str)
     putStrLn ""
@@ -54,13 +58,17 @@ testCtx vars = Ctx (0, 1) funMap varMap regs
         funMap = Map.empty
 
 testCoords :: Int -> AST.Script -> [(AST.VarName, VarCoord)]
-testCoords offset ((AST.VarDecl (name, _) _):rest) = x : xs
-    where 
-        x = (name, (1, offset))
-        xs = testCoords (offset + 1) rest
-
-testCoords offset (_:xs) = testCoords offset xs
 testCoords _ [] = []
+testCoords offset (x:xs)
+    | isNothing name = testCoords offset xs
+    | otherwise = newCoord : restCoords
+    where 
+        newCoord = (fromJust name, (1, offset))
+        restCoords = testCoords (offset + 1) xs
+        name = case x of
+            AST.VarDecl (n, _) _ -> Just n
+            AST.ForLoop (n, _) _ _ -> Just n
+            _ -> Nothing
 
 showLocalMem :: DbgInput -> String
 showLocalMem (_, systemState) = 
