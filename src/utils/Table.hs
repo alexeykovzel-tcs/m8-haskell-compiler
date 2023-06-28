@@ -1,7 +1,14 @@
 module Table where
 
+import Data.Map (Map)
+import qualified Data.Map as Map
+
 type Table a b c = [(a, Row b c)]
 type Row a b = [(a, b)]
+
+tableToMap :: (Ord a, Ord b) => Table a b c -> Map a (Map b c)
+tableToMap [] = Map.empty
+tableToMap ((k,v):xs) = Map.insert k (Map.fromList v) (tableToMap xs)
 
 findRow :: (Show a, Eq a) => a -> Table a b c -> Row b c
 findRow k [] = error $ "no such key: " ++ show k

@@ -3,12 +3,14 @@
 module Elaborator (
     Depth, Offset,
     VarTable, VarPos,
-    ScopeID
+    ScopeID,
+    varTable
 ) where
 
 import Parser
 import Data.Maybe
 import Data.Either
+import Data.Map (Map)
 import Text.Parsec.Pos
 import Control.Monad (join)
 import Table
@@ -23,8 +25,8 @@ varTable :: Script -> VarTable
 varTable script = result
     where (_, _, _, result) = allocVars (0, 0, (1, 0), []) script
 
-testVarTable :: FilePath -> IO()
-testVarTable file = join $ 
+testVarMap :: FilePath -> IO()
+testVarMap file = join $ 
     printTable . varTable . tryParse script <$> readFile file
 
 -----------------------------------------------------------------------------
