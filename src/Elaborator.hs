@@ -36,5 +36,7 @@ data Error
     | EmptyDecl     SourcePos String    -- variable decl. with no type and value
     | NoReturn      SourcePos           -- function decl. without return
 
+
+
 elaborate :: Script -> Either Error Overview
 elaborate script = error "not defined"

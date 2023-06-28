@@ -62,10 +62,10 @@ statement =
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
     <|> funDef          -- e.g. fun increment(x: Int) { }
-    <|> structDef       -- e.g. for x: Int in 2..10 { }
-    <|> forLoop         -- e.g. while x < 3 { print(x); }
-    <|> whileLoop       -- e.g. if x < y { } else { }
-    <|> condition       -- e.g. struct Person { first_name: String }
+    <|> structDef       -- e.g. struct Person { first_name: String }
+    <|> forLoop         -- e.g. for x: Int in 2..10 { } 
+    <|> whileLoop       -- e.g. while x < 3 { print(x); } 
+    <|> condition       -- e.g. if x < y { } else { } 
     <|> returnVal       -- e.g. return x;
     <|> action          -- e.g. print(x);
 
