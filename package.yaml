@@ -20,12 +20,16 @@ dependencies:
 - containers
 
 library:
-  source-dirs: src
+  source-dirs: 
+    - src
+    - src/utils
 
 executables:
   alphascript-exe:
-    main: Main.hs
-    source-dirs: src
+    main: Runner.hs
+    source-dirs:
+      - src
+      - src/utils
     ghc-options:
     - -threaded
     - -rtsopts
