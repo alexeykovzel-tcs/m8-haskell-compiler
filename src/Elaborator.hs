@@ -1,88 +1,118 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Elaborator (
-    -- Depth, Offset,
-    -- VarTable, VarPos,
-    -- ScopeID,
-    -- varTable
-) where
+module Elaborator (scopeCtx) where
 
 import Parser
-import Data.Maybe
-import Data.Either
--- import Data.Map (Map)
-import qualified Data.Map as Map
 import Text.Parsec.Pos
 import Control.Monad (join)
--- import Table
+import Utils.Table
+import Data.Map (Map)
+import qualified Data.Map as Map
+
+type ScopeID     = Integer
+type ScopeCtx    = (VarTable, ScopePath)
+
+scopeCtx :: Script -> ScopeCtx
+scopeCtx script = (varTable, scopePath)
+    where 
+        scopePath  = walkScopes script
+        varTable   = inheritVars (allocVars script) scopePath
+
+testScopeCtx :: FilePath -> IO()
+testScopeCtx file = do
+    (varTable, scopePath) <- scopeCtx . tryParse script <$> readFile file
+    putStrLn ""
+    printTable varTable
+    putStrLn "\nscope path:"
+    putStrLn $ show scopePath
+    putStrLn ""
+
+-----------------------------------------------------------------------------
+-- child-parent relationships between scopes
+-----------------------------------------------------------------------------
+
+type ScopePath = [(ScopeID, ScopeID)]
+
+walkScopes :: Script -> ScopePath
+walkScopes script = reverse path
+    where (path, _) = scopes ([], 0) script 
+
+class ScopeWalker a where
+    scopes :: (ScopePath, ScopeID) -> a -> (ScopePath, ScopeID)
+
+instance ScopeWalker Script where
+    scopes = foldl scopes
+
+instance ScopeWalker Statement where
+    scopes ctx@(path, last) stmt = 
+        let nextCtx = ((last + 1, last) : path, last + 1) 
+        in case stmt of
+            ForLoop _ _ body -> scopes nextCtx body
+            WhileLoop _ body -> scopes nextCtx body
+            Condition _ ifBody elseBody -> 
+                let 
+                    ifCtx@(ifScopes, ifLast) = scopes nextCtx ifBody
+                    elseCtx = ((ifLast + 1, last) : ifScopes, ifLast + 1)
+                in 
+                    maybe ifCtx (scopes elseCtx) elseBody
+            _ -> ctx
 
 -----------------------------------------------------------------------------
 -- position variables in memory
 -----------------------------------------------------------------------------
 
--- builds a table with memory positions for variables by scope
--- (each position contains scope depth and offset from ARP)
--- varTable :: Script -> VarTable
--- varTable script = result
---     where (_, _, _, result) = allocVars (0, 0, (1, 0), []) script
+type Offset      = Integer
+type Depth       = Integer
 
--- testVarMap :: FilePath -> IO()
--- testVarMap file = join $ 
---     printTable . varTable . tryParse script <$> readFile file
+type VarSize     = Integer
+type VarPos      = (Depth, Offset)
+type VarTable    = Table ScopeID VarName (VarPos, VarSize)
+type VarCtx      = (ScopeID, VarPos, VarTable)
 
------------------------------------------------------------------------------
+-- builds a tables with variable positions in memory
+allocVars :: Script -> VarTable
+allocVars script = varTable
+    where (_, _, varTable) = scriptVars (0, (1, 0), []) script
 
--- type ScopeID  = Int
--- type Offset   = Int
--- type Depth    = Int
+-- allocates variables for a given script
+scriptVars :: VarCtx -> Script -> VarCtx
+scriptVars ctx []     = ctx
+scriptVars ctx (x:xs) = scriptVars nextCtx xs
+    where nextCtx = case x of
+            VarDecl var _      -> allocVar ctx var
+            ForLoop i _ body   -> allocVar (childVars ctx [body]) i
+            WhileLoop _ body   -> childVars ctx [body]
+            Condition _ a b    -> childVars ctx $ a : maybe [] pure b
+            _                  -> ctx
 
--- type VarPos   = (Depth, Offset)
--- type VarTable = Table ScopeID VarName VarPos
--- type VarCtx   = (ScopeID, ScopeID, VarPos, VarTable)
+-- allocates variables for scripts on the next depth
+childVars :: VarCtx -> [Script] -> VarCtx
+childVars (scope, (depth, _), table) xs = peerVars newCtx xs
+    where newCtx = (scope + 1, (depth + 1, 0), table)
 
--- class VarAllocator a where
---     allocVars :: VarCtx -> a -> VarCtx
+-- allocates variables for scripts on the same depth
+peerVars :: VarCtx -> [Script] -> VarCtx
+peerVars ctx [] = ctx
+peerVars ctx [x] = scriptVars ctx x
+peerVars ctx@(_, pos, _) (x:xs) = 
+    let (scope, _, table) = scriptVars ctx x
+    in peerVars (scope + 1, pos, table) xs
 
--- instance VarAllocator Script where
---     allocVars ctx [] = ctx
---     allocVars ctx (x:xs) = allocVars (allocVars ctx x) xs
+-- allocates a variable in the current scope
+allocVar :: VarCtx -> VarDef -> VarCtx
+allocVar (scope, pos@(depth, offset), table) (name, _) =
+    let newTable = insertCell scope name (pos, 1) table
+    in (scope, (depth, offset + 1), newTable)
 
--- -- TODO: VarAllocator for FunDef
--- instance VarAllocator Statement where
---     allocVars ctx (VarDecl (name, _) _)   = allocVar ctx name
---     allocVars ctx (ForLoop (i, _) _ body) = allocVar (childScopes ctx [body]) i
---     allocVars ctx (WhileLoop _ body)      = childScopes ctx [body]
---     allocVars ctx (Condition _ a b)       = childScopes ctx $ a : maybe [] pure b
---     allocVars ctx _ = ctx
-
--- -- creates new scopes at the next depth
--- childScopes :: VarCtx -> [Script] -> VarCtx
--- childScopes (scope, _, (depth, _), table) xs
---     = peerScopes (scope + 1, scope, (depth + 1, 0), table) xs
-
--- -- creates new scopes at the same depth
--- peerScopes :: VarCtx -> [Script] -> VarCtx
--- peerScopes ctx [] = ctx
--- peerScopes ctx [script] = inheritVars ctx $ allocVars ctx script
--- peerScopes ctx@(scope, prevScope, pos, _) (script:scripts) 
---     = peerScopes (newScope + 1, prevScope, pos, newTable) scripts
---     where (newScope, _, _, newTable) = inheritVars ctx $ allocVars ctx script
-
--- -- inherits missing variable positions from the previous scope 
--- inheritVars :: VarCtx -> VarCtx -> VarCtx
--- inheritVars (scope, prevScope, _, _) (a, b, c, table) = (a, b, c, newTable)
---     where 
---         vars     = findRow scope table
---         prevVars = findRow prevScope table
---         newVars  = filterCells prevVars vars
---         newTable = updateRow scope newVars table
-
--- -- adds a variable position to the current scope
--- allocVar :: VarCtx -> String -> VarCtx
--- allocVar (scope, prevScope, pos@(depth, offset), table) name = newCtx
---     where 
---         newTable = insertCell scope name pos table
---         newCtx   = (scope, prevScope, (depth, offset + 1), newTable)
+-- inherits missing variables from the previous scopes
+inheritVars :: VarTable -> ScopePath -> VarTable
+inheritVars table [] = table
+inheritVars table ((scope, prevScope):xs) = inheritVars newTable xs
+    where 
+        vars      = findRow scope table
+        prevVars  = findRow prevScope table
+        newVars   = filterCells prevVars vars
+        newTable  = updateRow scope newVars table
 
 -----------------------------------------------------------------------------
 -- type checking
@@ -96,7 +126,7 @@ type PrevScope = (Int, Int)
 type Scopes = (CurScope, PrevScope)
 
 type VarType = (VarName, Maybe DataType)
-type ScopeData = Map.Map CurScope [VarType]
+type ScopeData = Map CurScope [VarType]
 
 type TypeChecker = Either Error VarScopes
 
@@ -137,7 +167,7 @@ checkTypes :: Script -> TypeChecker -> TypeChecker
 checkTypes [] typeChecker = typeChecker
 checkTypes ((VarDecl var@(vName, vType) _):xs) typeChecker 
                           = checkTypes xs (addVar var typeChecker)
-checkTypes ((VarAssign vName expr):xs) typeChecker = error expr
+-- checkTypes ((VarAssign vName expr):xs) typeChecker = error expr
 
 -- instance TypeChecker Script where
 --     elaborate [] = Right $ []

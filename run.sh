@@ -1,1 +1,0 @@
-stack ghci src/Runner.hs

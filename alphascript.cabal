@@ -20,7 +20,8 @@ library
       Lexer
       Parser
       Runner
-      Table
+      Utils.Sprockell
+      Utils.Table
   other-modules:
       Paths_alphascript
   hs-source-dirs:
@@ -42,7 +43,8 @@ executable alphascript-exe
       Elaborator
       Lexer
       Parser
-      Table
+      Utils.Sprockell
+      Utils.Table
       Paths_alphascript
   hs-source-dirs:
       src
