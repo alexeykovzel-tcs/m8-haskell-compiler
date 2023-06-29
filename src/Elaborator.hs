@@ -87,9 +87,34 @@ allocVar (scope, prevScope, pos@(depth, offset), table) name = newCtx
 -- type checking
 -----------------------------------------------------------------------------
 
+steasy :: Script
+steasy = tryParse script "let x: Int = 5; let y = 0; let arr = []; let z = \"\"; x + y + z;"
+
+type CurScope = (Int, Int)
+type PrevScope = (Int, Int)
+type Scopes = CurScope PrevScope
+
+type VarType = (VarName, Maybe DataType)
+type ScopeData = Map CurScope [VarType]
+
+data VarScopes = VarScopes Scopes ScopeData deriving Show
+
 data Error 
     = InvalidType   SourcePos String    -- applying operation to an invalid type
     | DupDecl       SourcePos String    -- duplicate entity declaration
     | MissingDecl   SourcePos String    -- calling non-existent entity
     | EmptyDecl     SourcePos String    -- variable decl. with no type and value
     | NoReturn      SourcePos           -- function decl. without return
+    deriving Show
+
+class TypeChecker a where
+    elaborate :: a -> Either Error a
+
+instance TypeChecker Script where
+    elaborate [] = Right $ []
+    elaborate (x:xs)
+                 | isRight (elaborate x) = elaborate xs
+                 | otherwise = error "Error: Script!"
+
+instance TypeChecker Statement where
+    elaborate (VarDecl (varName, varType) _) = error varName

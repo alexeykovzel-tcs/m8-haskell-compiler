@@ -1,5 +1,5 @@
 module Parser (
-    FunName, VarName,
+    FunName, VarName, DataType,
     Script, Statement(..), Expr(..), Value(..), LoopIter(..),
     script, statement, expr,
     tryParse
