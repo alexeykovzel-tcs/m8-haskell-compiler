@@ -64,15 +64,15 @@ compileStmt ctx stmt = case stmt of
     AST.Action expr                    -> compileExpr ctx2 expr reg2
     
     AST.WhileLoop expr script 
-        -> cond ++ branch ++ body ++ jumpBack
+        -> cond ++ branch ++ bodyScope ++ jumpBack
         where
             cond      = compileCond ctx2 expr reg2 
             branch    = [Branch reg2 $ Rel relSkip]
-            body      = scopeDown ++ compileScript bodyCtx script ++ scopeUp
-            jumpBack  = [Jump $ Rel relBack]
             relSkip   = (length body) + 2
+            body      = compileScript (nextScope ctx) script
+            bodyScope = (scopeDown ctx) ++ body ++ (scopeUp ctx)
+            jumpBack  = [Jump $ Rel relBack]
             relBack   = - (length body) - (length branch) - (length cond)
-            (bodyCtx, scopeDown) = nextScope ctx
     
     -- TODO: Update ARP
     AST.ForLoop (iter, _) (AST.IterRange from to) script 
@@ -109,17 +109,22 @@ compileStmt ctx stmt = case stmt of
     where (reg2, ctx2) = occupyReg ctx
 
 -- offset DP by the size of the current scope 
-nextScope :: Context -> (Context, [Instruction])
-nextScope ctx@(Ctx (scopeId, scopeDepth) scopeMap regs) = (newCtx, updateDP)
+nextScope :: Context -> Context
+nextScope (Ctx (scopeId, scopeDepth) scopeMap regs) = 
+    Ctx (scopeId + 1, scopeDepth + 1) scopeMap regs
+
+scopeDown :: Context -> [Instruction]
+scopeDown ctx = moveScope ctx 1
+
+scopeUp :: Context -> [Instruction]
+scopeUp ctx = moveScope ctx (-1)
+
+moveScope :: Context -> Int -> [Instruction]
+moveScope ctx@(Ctx (scopeId, _) scopeMap _) mult = 
+    [loadImm (toInteger mult * offsetDP) reg, Compute Add reg regDP regDP]
     where 
         (_, offsetDP) = fromJust $ Map.lookup scopeId scopeMap
-        updateDP = [loadImm offsetDP reg, Compute Add reg regDP regDP]
-        newCtx = Ctx (scopeId + 1, scopeDepth + 1) scopeMap regs
         reg = findReg ctx
-
--- offset DP by the -size of the previous scope
-scopeUp :: [Instruction]
-scopeUp = [Load (IndAddr regDP) regDP]
 
 compileCond :: Context -> AST.Expr -> RegAddr -> [Instruction]
 compileCond ctx expr reg = 
@@ -223,17 +228,11 @@ updateVar ctx name reg = arpToReg ++ varToMem
 
 -- updates a variable in memory by value
 updateVarImm :: Context -> VarName -> Integer -> [Instruction]
-updateVarImm ctx name val = (loadImm val reg2) : (updateVar ctx2 name reg2)
+updateVarImm ctx name val = 
+    (loadImm val reg2) : (updateVar ctx2 name reg2)
     where (reg2, ctx2) = occupyReg ctx
 
 -----------------------------------------------------------------------------
-
--- finds ARP at a certain depth
-depthArp :: Context -> Depth -> RegAddr -> [Instruction]
-depthArp ctx depth reg = loadArp ctx depthDiff reg
-    where 
-        depthDiff = depth - scopeDepth
-        (_, scopeDepth) = scope ctx
 
 -- finds a variable position in memory
 varPos :: Context -> VarName -> VarPos
@@ -242,14 +241,15 @@ varPos (Ctx (scopeId, _) scopeMap _) name = varPos
         (varMap, _) = fromJust $ Map.lookup scopeId scopeMap
         (varPos, _) = fromJust $ Map.lookup name varMap
 
+-- finds ARP at a certain depth
+depthArp :: Context -> Depth -> RegAddr -> [Instruction]
+depthArp ctx depth reg = loadArp ctx (depth - scopeDepth) reg
+    where (_, scopeDepth) = scope ctx
+
 -- loads an ARP by a depth difference
 loadArp :: Context -> Depth -> RegAddr -> [Instruction]
 loadArp _   0     reg = [copyReg regDP reg]
-loadArp ctx 1     reg = loadAI ctx regDP (-1) reg
-loadArp ctx depth reg = upperArps ++ prevArp
-    where 
-        upperArps = loadArp ctx (depth - 1) reg
-        prevArp = loadAI ctx reg (-1) reg
+loadArp ctx depth reg = [] -- TODO
 
 -----------------------------------------------------------------------------
 -- register management
@@ -269,6 +269,9 @@ occupyReg (Ctx s v (r:rs)) = (r, Ctx s v rs)
 findReg :: Context -> RegAddr
 findReg ctx = let (r:_) = freeRegs ctx in r
 
+copyReg :: RegAddr -> RegAddr -> Instruction
+copyReg reg1 reg2 = Compute Add reg0 reg1 reg2
+
 -- loads value to a register 
 loadImm :: Integer -> RegAddr -> Instruction
 loadImm val reg = Load (ImmValue $ fromInteger val) reg
@@ -276,9 +279,6 @@ loadImm val reg = Load (ImmValue $ fromInteger val) reg
 -- reverses boolean value in a register
 reverseBool :: Context -> RegAddr -> [Instruction]
 reverseBool ctx reg = [Compute Equal reg reg0 reg]
-
-copyReg :: RegAddr -> RegAddr -> Instruction
-copyReg reg1 reg2 = Compute Add reg0 reg1 reg2
 
 -----------------------------------------------------------------------------
 -- memory management
