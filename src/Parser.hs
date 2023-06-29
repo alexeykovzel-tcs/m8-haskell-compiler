@@ -9,6 +9,8 @@ import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
 import Data.Maybe
 import Lexer
+import Test.QuickCheck as QC
+
 
 -- TODO: Error handling.
 -- TODO: More testing.
@@ -183,7 +185,7 @@ term = factor `chainl1` op
 
 -- factor * factor / factor
 factor :: Parser Expr
-factor = Fixed <$> value
+factor = Parser.Fixed <$> value
     <|> try lambda          -- e.g. (x: Int) -> { ... }
     <|> parens expr         -- e.g. (2 + 3)
     <|> try funCall         -- e.g. print("Hello")
@@ -253,6 +255,67 @@ array = brackets $ value `sepBy` comma
 boolean :: Parser Bool
 boolean = False <$ reserved "false"
       <|> True  <$ reserved "true"
+
+-----------------------------------------------------------------------------
+-- Generator for script
+-----------------------------------------------------------------------------
+instance QC.Arbitrary Statement where
+    arbitrary = QC.oneof [
+        VarDecl <$> QC.arbitrary <*> QC.arbitrary,
+        VarAssign <$> QC.arbitrary <*> QC.arbitrary,
+        ArrInsert <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
+        FunDef <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
+        ForLoop <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
+        WhileLoop <$> QC.arbitrary <*> QC.arbitrary,
+        Condition <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
+        ReturnVal <$> QC.arbitrary,
+        Action <$> QC.arbitrary]
+
+instance QC.Arbitrary Expr where
+    arbitrary = QC.sized expr
+        where
+            expr 0 = Parser.Fixed <$> QC.arbitrary
+            expr n = QC.oneof [
+                FunCall <$> QC.arbitrary <*> QC.resize (n `div` 2) QC.arbitrary,
+                Ternary <$> nextExpr <*> nextExpr <*> nextExpr,
+                Lambda <$> QC.arbitrary <*> QC.arbitrary,
+                Both <$> nextExpr <*> nextExpr,
+                OneOf <$> nextExpr <*> nextExpr,
+                Eq <$> nextExpr <*> nextExpr,
+                MoreEq <$> nextExpr <*> nextExpr,
+                LessEq <$> nextExpr <*> nextExpr,
+                More <$> nextExpr <*> nextExpr,
+                Less <$> nextExpr <*> nextExpr,
+                Add <$> nextExpr <*> nextExpr,
+                Sub <$> nextExpr <*> nextExpr,
+                Mult <$> nextExpr <*> nextExpr,
+                Var <$> QC.arbitrary,
+                Parser.Fixed <$> QC.arbitrary]
+                where nextExpr = expr (n `div` 2)
+
+instance QC.Arbitrary DataType where
+    arbitrary = QC.oneof [
+        pure StrType,
+        pure BoolType,
+        pure IntType,
+        ArrType <$> QC.arbitrary <*> QC.arbitrary]
+
+instance QC.Arbitrary Value where
+    arbitrary =  QC.oneof [
+        Text <$> QC.arbitrary,
+        Bool <$> QC.arbitrary,
+        Int <$> QC.arbitrary,
+        Arr <$> QC.arbitrary,
+        pure None]
+
+instance QC.Arbitrary LoopIter where
+    arbitrary = QC.oneof [
+        IterRange <$> QC.arbitrary <*> QC.arbitrary,
+        IterArr <$> QC.listOf QC.arbitrary,
+        IterVar <$> QC.arbitrary]
+
+autoScript :: IO Script
+autoScript = QC.generate (QC.resize 3 QC.arbitrary)
 
 -----------------------------------------------------------------------------
 -- other parsers
