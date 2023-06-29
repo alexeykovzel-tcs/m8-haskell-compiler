@@ -1,10 +1,4 @@
-module Parser (
-    FunName, VarName, VarDef,
-    Script, Statement(..), Expr(..), LoopIter(..),
-    Value(..), DataType(..),
-    script, statement, expr,
-    tryParse
-) where
+module Parser where
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char

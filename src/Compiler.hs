@@ -5,49 +5,23 @@ module Compiler (compile) where
 import Sprockell
 import Elaborator
 import Data.Maybe
-import Data.Char
-import Table (tableToMap)
+import Utils.Table (tableToMap)
+import Utils.Sprockell
 import Debug.Trace (trace)
-import Parser (VarName, FunName)
 import qualified Parser as AST
 import qualified Data.Map as Map
-
-type Scope      = (ScopeID, Depth)
-type ScopeSize  = Integer
-type ScopeInfo  = (VarMap, ScopeSize, ScopeID)
-type ScopeMap   = Map.Map ScopeID ScopeInfo
-type VarMap     = Map.Map VarName (VarPos, VarSize)
-
-data Context = Ctx {
-    lastScope :: Scope,
-    scopeMap  :: ScopeMap,
-    freeRegs  :: [RegAddr]
-}
 
 compile :: String -> [Instruction]
 compile code = initDP ++ progASM ++ [EndProg]
     where
-        prog     = AST.tryParse AST.script code
-        progCtx  = initCtx prog
-        progASM  = compileScript progCtx prog
-
-initDP :: [Instruction]
-initDP = [Load (ImmValue 0) regDP]
+        prog    = AST.tryParse AST.script code
+        progASM = compileScript (initCtx prog) prog
 
 initCtx :: AST.Script -> Context
-initCtx prog = Ctx (0, 1) scopeMap userRegs
+initCtx prog = Ctx (0, 1) scopeMap path userRegs
     where
         (varTable, path) = scopeCtx prog
-        scopeMap  = toScopeMap pathMap varMap
-        pathMap   = Map.fromList path
-        varMap    = tableToMap varTable
-
-toScopeMap :: Map.Map ScopeID ScopeID -> Map.Map ScopeID VarMap -> ScopeMap
-toScopeMap pathMap varMap = Map.mapWithKey getInfo varMap
-    where 
-        getInfo id varMap  = (varMap, scopeSize varMap, prevScope id)
-        scopeSize varMap   = sumSeconds $ Map.elems varMap
-        prevScope id       = fromMaybe (-1) (Map.lookup id pathMap)
+        scopeMap = toScopeMap (Map.fromList path) (tableToMap varTable)
 
 -----------------------------------------------------------------------------
 -- script compilation
@@ -100,7 +74,7 @@ compileStmt ctx stmt = case stmt of
         -> cond ++ branch ++ ifBody ++ elseBody
         where
             ctxScp    = inScopeCtx ctx
-            ctxScp2   = ... -- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            ctxScp2   = ctx
             cond      = compileCond ctx2 expr reg2
             branch    = [Branch reg2 $ Rel $ length ifBody + 1]
             ifBody    = inScope ctx (compileScript ctxScp ifScript) ++ skipElse
@@ -109,21 +83,6 @@ compileStmt ctx stmt = case stmt of
             jumpElse  = [Jump $ Rel $ length elseBody + 1]
 
     where (reg2, ctx2) = occupyReg ctx
-
--- offset DP by the size of the current scope 
-inScopeCtx :: Context -> Context
-inScopeCtx (Ctx (scope, scopeDepth) scopeMap regs) = 
-    Ctx (scope + 1, scopeDepth + 1) scopeMap regs
-
-inScope :: Context -> [Instruction] -> [Instruction]
-inScope ctx body = (moveScope ctx 1) ++ body ++ (moveScope ctx $ -1)
-
-moveScope :: Context -> Integer -> [Instruction]
-moveScope ctx@(Ctx (scope, _) scopeMap _) mult = 
-    [loadImm (toInteger mult * offsetDP) reg, Compute Add reg regDP regDP]
-    where 
-        (_, offsetDP, _) = fromJust $ Map.lookup scope scopeMap
-        reg = findReg ctx
 
 compileCond :: Context -> AST.Expr -> RegAddr -> [Instruction]
 compileCond ctx expr reg = 
@@ -198,157 +157,3 @@ compileBin ctx e1 e2 reg op =
         (reg2, ctx2) = occupyReg ctx
         c1 = compileExpr ctx  e1 reg
         c2 = compileExpr ctx2 e2 reg2
-
------------------------------------------------------------------------------
--- variable instructions
------------------------------------------------------------------------------
-
--- loads variable data from memory to a register
-loadVar :: Context -> VarName -> RegAddr -> [Instruction]
-loadVar ctx name reg = dpToReg ++ valToReg
-    where 
-        (depth, offset) = locateVar ctx name
-        (reg2, ctx2)    = occupyReg ctx
-        dpToReg         = loadDP ctx2 depth reg2
-        valToReg        = offsetLoad ctx2 reg2 offset reg
-
--- updates a variable in memory from register
-updateVar :: Context -> VarName -> RegAddr -> [Instruction]
-updateVar ctx name reg = dpToReg ++ varToMem
-    where
-        (depth, offset) = locateVar ctx name
-        (reg2, ctx2)    = occupyReg ctx
-        dpToReg         = loadDP ctx2 depth reg2
-        varToMem        = offsetStore ctx2 reg reg2 offset
-
--- updates a variable in memory by value
-updateVarImm :: Context -> VarName -> Integer -> [Instruction]
-updateVarImm ctx name val = 
-    (loadImm val reg2) : (updateVar ctx2 name reg2)
-    where (reg2, ctx2) = occupyReg ctx
-
--- loads a data pointer at a given depth
-loadDP :: Context -> Depth -> RegAddr -> [Instruction]
-loadDP ctx depth reg = 
-    [loadImm dpOffset reg, Compute Add reg regDP reg]
-    where 
-        (scope, scopeDepth) = lastScope ctx
-        depthDiff = scopeDepth - depth
-        dpOffset = - (scopeOffset ctx scope depthDiff)
-
------------------------------------------------------------------------------
--- context helpers
------------------------------------------------------------------------------
-
-scopeOffset :: Context -> ScopeID -> Depth -> Offset
-scopeOffset _   _     0     = 0
-scopeOffset ctx scope depthDiff = 
-    scopeOffset ctx prevScope (depthDiff - 1) + prevScopeSize
-    where 
-        prevScope     = findPrevScope ctx scope
-        prevScopeSize = fromInteger $ measureScope ctx prevScope
-
-findPrevScope :: Context -> ScopeID -> ScopeID
-findPrevScope ctx scope = prevScope
-    where (_, _, prevScope) = analyzeScope ctx scope 
-
-measureScope :: Context -> ScopeID -> ScopeSize
-measureScope ctx scope = scopeSize
-    where (_, scopeSize, _) = analyzeScope ctx scope 
-
-analyzeScope :: Context -> ScopeID -> ScopeInfo
-analyzeScope ctx scope = fromJust $ Map.lookup scope $ scopeMap ctx
-
-locateVar :: Context -> VarName -> VarPos
-locateVar (Ctx (scopeId, _) scopeMap _) name = varPos
-    where 
-        (varMap, _, _) = fromJust $ Map.lookup scopeId scopeMap
-        (varPos, _)    = fromJust $ Map.lookup name varMap
-
------------------------------------------------------------------------------
--- register management
------------------------------------------------------------------------------
-
--- Reserve register for a data pointer
-regDP = regA
-
--- registers for free usage
-userRegs = [regB, regC, regD, regE, regF]
-
--- occupies a free register
-occupyReg :: Context -> (RegAddr, Context)
-occupyReg (Ctx s v (r:rs)) = (r, Ctx s v rs)
-
--- finds a free register
-findReg :: Context -> RegAddr
-findReg ctx = let (r:_) = freeRegs ctx in r
-
--- copies value from reg1 to reg2
-copyReg :: RegAddr -> RegAddr -> Instruction
-copyReg reg1 reg2 = Compute Add reg0 reg1 reg2
-
--- loads value to reg 
-loadImm :: Integer -> RegAddr -> Instruction
-loadImm val reg = Load (ImmValue $ fromInteger val) reg
-
--- reverses boolean in reg
-notBool :: Context -> RegAddr -> [Instruction]
-notBool ctx reg = [Compute Equal reg reg0 reg]
-
-addImm :: Context -> Integer -> RegAddr -> [Instruction]
-addImm ctx val reg = let reg2 = findReg ctx in 
-    [loadImm val reg2, Compute Add reg reg2 reg]
-
------------------------------------------------------------------------------
--- memory management
------------------------------------------------------------------------------
-
--- increments a variable in memory
-incrMem :: Context -> VarName -> [Instruction]
-incrMem ctx name = addMem ctx name 1
-
--- adds value to a variable in memory
-addMem :: Context -> VarName -> Integer -> [Instruction]
-addMem ctx name val = let (reg2, ctx2) = occupyReg ctx in
-       loadVar    ctx2 name reg2
-    ++ addImm     ctx2 val  reg2 
-    ++ updateVar  ctx2 name reg2
-
--- loads from memory with an offset
-offsetLoad :: Context -> RegAddr -> Offset -> RegAddr -> [Instruction]
-offsetLoad ctx reg1 offset reg2 = 
-    [
-        loadImm offset reg2,
-        Compute Add reg1 reg2 reg2,
-        Load (IndAddr reg2) reg2
-    ]
-
--- stores to memory with an offset
-offsetStore :: Context -> RegAddr -> RegAddr -> Offset -> [Instruction]
-offsetStore ctx reg1 reg2 offset =
-    [
-        loadImm offset reg3,
-        Compute Add reg3 reg2 reg2,
-        Store reg1 (IndAddr reg2)
-    ]
-    where reg3 = findReg ctx
-
------------------------------------------------------------------------------
--- IO instructions
------------------------------------------------------------------------------
-
--- code to print a string
-writeString :: Context -> String -> [Instruction]
-writeString ctx str = concat $ map (writeChar $ findReg ctx) str
-
--- code to print a single character
-writeChar :: RegAddr -> Char -> [Instruction]
-writeChar reg c = [Load (ImmValue $ ord c) reg, WriteInstr reg charIO]
-
------------------------------------------------------------------------------
--- Other utilities
------------------------------------------------------------------------------
-
-sumSeconds :: [(a, Integer)] -> Integer
-sumSeconds [] = 0
-sumSeconds ((_, x):xs) = x + sumSeconds xs 

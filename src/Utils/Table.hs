@@ -1,4 +1,4 @@
-module Table where
+module Utils.Table where
 
 import Data.Map (Map)
 import qualified Data.Map as Map

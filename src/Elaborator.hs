@@ -1,15 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Elaborator (
-    Depth, Offset,
-    VarTable, VarPos, VarSize,
-    ScopeID, ScopePath,
-    scopeCtx
-) where
+module Elaborator (scopeCtx) where
 
 import Parser
 import Text.Parsec.Pos
-import Table
+import Utils.Table
 
 type ScopeID     = Integer
 type ScopeCtx    = (VarTable, ScopePath)
@@ -25,7 +20,7 @@ testScopeCtx file = do
     (varTable, scopePath) <- scopeCtx . tryParse script <$> readFile file
     putStrLn ""
     printTable varTable
-    putStrLn "\nscope chain:"
+    putStrLn "\nscope path:"
     putStrLn $ show scopePath
     putStrLn ""
 
