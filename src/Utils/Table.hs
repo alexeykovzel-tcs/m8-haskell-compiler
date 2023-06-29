@@ -1,4 +1,4 @@
-module Table where
+module Utils.Table where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -10,17 +10,17 @@ tableToMap :: (Ord a, Ord b) => Table a b c -> Map a (Map b c)
 tableToMap [] = Map.empty
 tableToMap ((k,v):xs) = Map.insert k (Map.fromList v) (tableToMap xs)
 
-findRow :: (Show a, Eq a) => a -> Table a b c -> Row b c
-findRow k [] = error $ "no such key: " ++ show k
+findRow :: (Eq a) => a -> Table a b c -> Row b c
+findRow k [] = []
 findRow k ((kx, val):xs)
     | k == kx = val
     | otherwise = findRow k xs
 
-updateRow :: (Show a, Eq a) => a -> Row b c -> Table a b c -> Table a b c
-updateRow k _ [] = error $ "no such key: " ++ show k
-updateRow k toAdd (x@(kx, val):xs)
-    | k == kx = (kx, val ++ toAdd) : xs
-    | otherwise = x : updateRow k toAdd xs
+updateRow :: (Eq a) => a -> Row b c -> Table a b c -> Table a b c
+updateRow k v [] = [(k, v)]
+updateRow k v (x@(kx, kv):xs)
+    | k == kx = (kx, kv ++ v) : xs
+    | otherwise = x : updateRow k v xs
 
 insertCell :: Eq a => a -> b -> c -> Table a b c -> Table a b c
 insertCell k1 k2 v2 [] = [(k1, [(k2, v2)])] 
