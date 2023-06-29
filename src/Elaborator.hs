@@ -47,9 +47,6 @@ incScope (a, b) = (a+1, b)
 decScope :: Scope -> Scope
 decScope (a, b) = (a-1, b)
 
-incDepth :: Scope -> Scope
-incDepth (a, b) = (a, b+1)
-
 insertVar :: Scope -> VarName -> VarCoord -> VarMap -> VarMap
 insertVar scope varName varCoord varMap
             = Map.insert scope (Map.insert varName varCoord (Map.findWithDefault Map.empty scope varMap)) varMap
