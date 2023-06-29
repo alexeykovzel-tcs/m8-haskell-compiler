@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Compiler where
+module Compiler (compile) where
 
 import Sprockell
 import Elaborator
@@ -11,24 +11,41 @@ import Parser (VarName, FunName)
 import qualified Parser as AST
 import qualified Data.Map as Map
 
-type VarMap = Map.Map ScopeID (Map.Map VarName VarPos) 
-type Scope = (ScopeID, Depth)
+type Scope      = (ScopeID, Depth)
+type ScopeSize  = Integer
+type ScopeMap   = Map.Map ScopeID (VarMap, ScopeSize)
+type VarMap     = Map.Map VarName (VarPos, VarSize)
 
 data Context = Ctx {
-    scope :: Scope,
-    varMap :: VarMap,
-    freeRegs  :: [RegAddr]
+    scope    :: Scope,
+    scopeMap :: ScopeMap,
+    freeRegs :: [RegAddr]
 }
 
 compile :: String -> [Instruction]
 compile code = preCompile ++ compileScript ctx prog ++ [EndProg]
     where
         prog = AST.tryParse AST.script code
-        ctx = Ctx (0, 1) (tableToMap $ varTable prog) userRegs
+        ctx = Ctx (0, 1) (inferScopes prog) userRegs
+
+-----------------------------------------------------------------------------
+-- compilation preprocessing
+-----------------------------------------------------------------------------
 
 -- TODO: Build "main" activation record
 preCompile :: [Instruction]
-preCompile = [Load (ImmValue 0) regArp]
+preCompile = [Load (ImmValue 0) regDP]
+
+inferScopes :: AST.Script -> ScopeMap
+inferScopes prog = scopeSizes $ tableToMap $ varTable prog 
+
+scopeSizes :: Map.Map ScopeID VarMap -> ScopeMap
+scopeSizes scopeMap = Map.map measure scopeMap
+    where measure varMap = (varMap, sumSeconds $ Map.elems varMap)
+
+sumSeconds :: [(a, Integer)] -> Integer
+sumSeconds [] = 0
+sumSeconds ((_, x):xs) = x + sumSeconds xs 
 
 -----------------------------------------------------------------------------
 -- script compilation
@@ -47,17 +64,17 @@ compileStmt ctx stmt = case stmt of
     AST.Action expr                    -> compileExpr ctx2 expr reg2
     
     AST.WhileLoop expr script 
-        -> cond ++ notCond ++ branch ++ body ++ jumpBack
+        -> cond ++ branch ++ body ++ jumpBack
         where
-            cond      = compileExpr ctx2 expr reg2 
-            notCond   = reverseBool ctx2 reg2
+            cond      = compileCond ctx2 expr reg2 
             branch    = [Branch reg2 $ Rel relSkip]
-            body      = compileScript ctx script
+            body      = scopeDown ++ compileScript bodyCtx script ++ scopeUp
             jumpBack  = [Jump $ Rel relBack]
             relSkip   = (length body) + 2
-            relBack   = - (length body) - (length branch) 
-                        - (length notCond) - (length cond)
+            relBack   = - (length body) - (length branch) - (length cond)
+            (bodyCtx, scopeDown) = nextScope ctx
     
+    -- TODO: Update ARP
     AST.ForLoop (iter, _) (AST.IterRange from to) script 
         -> saveIter ++ loadIter ++ branch ++ body ++ incrIter ++ jumpBack
         where 
@@ -75,13 +92,12 @@ compileStmt ctx stmt = case stmt of
                         - (length loadIter) - (length branch)
 
     AST.Condition expr ifScript elseScript 
-        -> cond ++ notCond ++ branch ++ ifBody ++ elseBody
+        -> cond ++ branch ++ ifBody ++ elseBody
         where
-            cond      = compileExpr ctx2 expr reg2
-            notCond   = reverseBool ctx2 reg2
+            cond      = compileCond ctx2 expr reg2
             branch    = [Branch reg2 $ Rel $ length ifBody + 1]
-            ifBody    = compileScript ctx ifScript ++ skipElse
-            elseBody  = maybe [] (compileScript ctx) elseScript
+            ifBody    = compileScript ctx ifScript ++ skipElse -- TODO: increase depth & scope
+            elseBody  = maybe [] (compileScript ctx) elseScript -- TODO: increase scope
             skipElse  = maybe [] (\_ -> jumpElse) elseScript
             jumpElse  = [Jump $ Rel $ length elseBody + 1]
 
@@ -91,6 +107,23 @@ compileStmt ctx stmt = case stmt of
     -- AST.ArrInsert name idx expr -> []
 
     where (reg2, ctx2) = occupyReg ctx
+
+-- offset DP by the size of the current scope 
+nextScope :: Context -> (Context, [Instruction])
+nextScope ctx@(Ctx (scopeId, scopeDepth) scopeMap regs) = (newCtx, updateDP)
+    where 
+        (_, offsetDP) = fromJust $ Map.lookup scopeId scopeMap
+        updateDP = [loadImm offsetDP reg, Compute Add reg regDP regDP]
+        newCtx = Ctx (scopeId + 1, scopeDepth + 1) scopeMap regs
+        reg = findReg ctx
+
+-- offset DP by the -size of the previous scope
+scopeUp :: [Instruction]
+scopeUp = [Load (IndAddr regDP) regDP]
+
+compileCond :: Context -> AST.Expr -> RegAddr -> [Instruction]
+compileCond ctx expr reg = 
+    (compileExpr ctx expr reg) ++ (reverseBool ctx reg)
 
 compileVar :: Context -> VarName -> AST.Expr -> [Instruction]
 compileVar ctx name expr = exprToReg ++ varToMem
@@ -129,10 +162,9 @@ compileExpr ctx expr reg = case expr of
     AST.Fixed (AST.Text text) -> []
 
     AST.Ternary expr e1 e2
-        -> cond ++ notCond ++ branch ++ ifBody ++ elseBody
+        -> cond ++ branch ++ ifBody ++ elseBody
         where
-            cond      = compileExpr ctx expr reg
-            notCond   = reverseBool ctx reg
+            cond      = compileCond ctx expr reg
             branch    = [Branch reg $ Rel $ length ifBody + 1]
             ifBody    = compileExpr ctx e1 reg ++ jumpElse
             elseBody  = compileExpr ctx e2 reg
@@ -205,31 +237,26 @@ depthArp ctx depth reg = loadArp ctx depthDiff reg
 
 -- finds a variable position in memory
 varPos :: Context -> VarName -> VarPos
-varPos (Ctx (scopeId, _) varMap _) name = result
+varPos (Ctx (scopeId, _) scopeMap _) name = varPos
     where 
-        scopeVarMap = fromJust $ Map.lookup scopeId varMap
-        result    = fromJust $ Map.lookup name scopeVarMap
+        (varMap, _) = fromJust $ Map.lookup scopeId scopeMap
+        (varPos, _) = fromJust $ Map.lookup name varMap
 
 -- loads an ARP by a depth difference
 loadArp :: Context -> Depth -> RegAddr -> [Instruction]
-loadArp _   0     reg = [Compute Add reg0 regArp reg]
-loadArp ctx 1     reg = loadAI ctx regArp (-1) reg
+loadArp _   0     reg = [copyReg regDP reg]
+loadArp ctx 1     reg = loadAI ctx regDP (-1) reg
 loadArp ctx depth reg = upperArps ++ prevArp
     where 
         upperArps = loadArp ctx (depth - 1) reg
         prevArp = loadAI ctx reg (-1) reg
 
 -----------------------------------------------------------------------------
--- register instructions
+-- register management
 -----------------------------------------------------------------------------
 
--- reg0         always zero
--- regSprID     contains the sprockellID
--- regSP        stack pointer
--- regPC        program counter
-
--- Reserve register A for ARP
-regArp = regA
+-- Reserve register for a data pointer
+regDP = regA
 
 -- registers for free usage
 userRegs = [regB, regC, regD, regE, regF]
@@ -250,8 +277,11 @@ loadImm val reg = Load (ImmValue $ fromInteger val) reg
 reverseBool :: Context -> RegAddr -> [Instruction]
 reverseBool ctx reg = [Compute Equal reg reg0 reg]
 
+copyReg :: RegAddr -> RegAddr -> Instruction
+copyReg reg1 reg2 = Compute Add reg0 reg1 reg2
+
 -----------------------------------------------------------------------------
--- memory instructions
+-- memory management
 -----------------------------------------------------------------------------
 
 -- increments a variable in memory
