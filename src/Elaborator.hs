@@ -3,17 +3,13 @@
 module Elaborator (
     Depth, Offset,
     VarTable, VarPos, VarSize,
-    ScopeID, ScopePath
+    ScopeID, ScopePath,
+    scopeCtx
 ) where
 
 import Parser
-import Data.Maybe
-import Data.Either
 import Text.Parsec.Pos
-import Control.Monad (join)
 import Table
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 type ScopeID     = Integer
 type ScopeCtx    = (VarTable, ScopePath)
@@ -32,16 +28,6 @@ testScopeCtx file = do
     putStrLn "\nscope chain:"
     putStrLn $ show scopePath
     putStrLn ""
-
--- inherits missing variables from the previous scopes
-inheritVars :: VarTable -> ScopePath -> VarTable
-inheritVars table [] = table
-inheritVars table ((scope, prevScope):xs) = inheritVars newTable xs
-    where 
-        vars     = findRow scope table
-        prevVars = findRow prevScope table
-        newVars  = filterCells prevVars vars
-        newTable = updateRow scope newVars table
 
 -----------------------------------------------------------------------------
 -- child-parent relationships between scopes
@@ -119,6 +105,16 @@ allocVar :: VarCtx -> VarDef -> VarCtx
 allocVar (scope, pos@(depth, offset), table) (name, _) =
     let newTable = insertCell scope name (pos, 1) table
     in (scope, (depth, offset + 1), newTable)
+
+-- inherits missing variables from the previous scopes
+inheritVars :: VarTable -> ScopePath -> VarTable
+inheritVars table [] = table
+inheritVars table ((scope, prevScope):xs) = inheritVars newTable xs
+    where 
+        vars      = findRow scope table
+        prevVars  = findRow prevScope table
+        newVars   = filterCells prevVars vars
+        newTable  = updateRow scope newVars table
 
 -----------------------------------------------------------------------------
 -- type checking
