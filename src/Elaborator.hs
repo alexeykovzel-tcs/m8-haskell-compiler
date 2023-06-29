@@ -1,8 +1,7 @@
 module Elaborator (
     Depth, Offset,
     ScopeID, Scope,
-    Overview,
-    FunMap,
+    Context,
     VarMap,
     VarCoord,
     elaborate
@@ -20,13 +19,12 @@ type Depth = Int
 type ScopeID = Integer
 type Scope = (ScopeID, Depth)
 
-data Overview = Overview FunMap VarMap
+type ElabResult = Either Error Context
 
--- used to generate code from a function call 
-type FunMap = Map.Map FunName Statement
+data Context = Context Scope VarMap deriving Show
 
 -- used to determine a variable position in memory
-type VarMap = Map.Map ScopeID (Map.Map VarName VarCoord)
+type VarMap = Map.Map Scope (Map.Map VarName VarCoord)
 type VarCoord = (Depth, Offset)
 
 data Error 
@@ -35,8 +33,54 @@ data Error
     | MissingDecl   SourcePos String    -- calling non-existent entity
     | EmptyDecl     SourcePos String    -- variable decl. with no type and value
     | NoReturn      SourcePos           -- function decl. without return
+    deriving Show
 
+initScope :: Scope
+initScope = (0, 0)
 
+initContext :: VarMap
+initContext = Map.insert initScope Map.empty (Map.empty)
 
-elaborate :: Script -> Either Error Overview
-elaborate script = error "not defined"
+incScope :: Scope -> Scope
+incScope (a, b) = (a+1, b)
+
+decScope :: Scope -> Scope
+decScope (a, b) = (a-1, b)
+
+incDepth :: Scope -> Scope
+incDepth (a, b) = (a, b+1)
+
+insertVar :: Scope -> VarName -> VarCoord -> VarMap -> VarMap
+insertVar scope varName varCoord varMap
+            = Map.insert scope (Map.insert varName varCoord (Map.findWithDefault Map.empty scope varMap)) varMap
+
+findVar :: Scope -> String -> VarMap -> Bool
+findVar scope varName varMap
+        | isJust query = True
+        | otherwise = False
+        where query = Map.lookup varName (fromJust (Map.lookup scope varMap))
+
+traverseContext :: Scope -> VarName -> VarMap -> Bool
+traverseContext (-1,0) _ _ = False
+traverseContext scope varName varMap
+                      | findVar scope varName varMap = True
+                      | otherwise = traverseContext (decScope scope) varName varMap
+
+-- TODO: get right position
+initElaborate :: Script -> ElabResult -> ElabResult
+initElaborate [] context = error $ show context
+initElaborate ((VarDecl def maybeExpr):xs) (Right (Context scope varMap)) = initElaborate xs $ Right $ Context scope (insertVar scope (fst def) (1,1) varMap)
+initElaborate ((VarAssign name expr):xs) context@(Right (Context scope varMap))
+                                        | traverseContext scope name varMap = initElaborate xs context
+                                        | otherwise = Left $ MissingDecl (newPos "" 1 1) "Calling non-existent entity!"
+
+elaborate :: Script -> ElabResult
+elaborate script = initElaborate script (Right $ Context initScope initContext)
+
+-- Should give an error because y wasn't declared
+steasy :: Script
+steasy = tryParse script "let x = 2; x = 4; y = 5;"
+
+-- Should give an error because y in different scope + should change x = 1 from scope (0,0)
+sthard :: Script
+sthard = tryParse script "let x = 2; if true { let x = 5; let y = 2; } else { y = 4; for i in 1..3 { x = 1; } }"
