@@ -1,31 +1,91 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module Elaborator (
     Depth, Offset,
-    ScopeID, Scope,
-    Context,
-    VarMap,
-    VarCoord,
-    elaborate
+    VarTable, VarPos,
+    ScopeID,
+    varTable
 ) where
 
 import Parser
 import Data.Maybe
 import Data.Either
+import Data.Map (Map)
 import Text.Parsec.Pos
-import qualified Data.Map as Map
+import Control.Monad (join)
+import Table
 
-type Offset = Int
-type Depth = Int
+-----------------------------------------------------------------------------
+-- position variables in memory
+-----------------------------------------------------------------------------
 
-type ScopeID = Integer
-type Scope = (ScopeID, Depth)
+-- builds a table with memory positions for variables by scope
+-- (each position contains scope depth and offset from ARP)
+varTable :: Script -> VarTable
+varTable script = result
+    where (_, _, _, result) = allocVars (0, 0, (1, 0), []) script
 
-type ElabResult = Either Error Context
+testVarMap :: FilePath -> IO()
+testVarMap file = join $ 
+    printTable . varTable . tryParse script <$> readFile file
 
-data Context = Context Scope VarMap deriving Show
+-----------------------------------------------------------------------------
 
--- used to determine a variable position in memory
-type VarMap = Map.Map Scope (Map.Map VarName VarCoord)
-type VarCoord = (Depth, Offset)
+type ScopeID  = Int
+type Offset   = Int
+type Depth    = Int
+
+type VarPos   = (Depth, Offset)
+type VarTable = Table ScopeID VarName VarPos
+type VarCtx   = (ScopeID, ScopeID, VarPos, VarTable)
+
+class VarAllocator a where
+    allocVars :: VarCtx -> a -> VarCtx
+
+instance VarAllocator Script where
+    allocVars ctx [] = ctx
+    allocVars ctx (x:xs) = allocVars (allocVars ctx x) xs
+
+-- TODO: VarAllocator for FunDef
+instance VarAllocator Statement where
+    allocVars ctx (VarDecl (name, _) _)   = allocVar ctx name
+    allocVars ctx (ForLoop (i, _) _ body) = allocVar (childScopes ctx [body]) i
+    allocVars ctx (WhileLoop _ body)      = childScopes ctx [body]
+    allocVars ctx (Condition _ a b)       = childScopes ctx $ a : maybe [] pure b
+    allocVars ctx _ = ctx
+
+-- creates new scopes at the next depth
+childScopes :: VarCtx -> [Script] -> VarCtx
+childScopes (scope, _, (depth, _), table) xs
+    = peerScopes (scope + 1, scope, (depth + 1, 0), table) xs
+
+-- creates new scopes at the same depth
+peerScopes :: VarCtx -> [Script] -> VarCtx
+peerScopes ctx [] = ctx
+peerScopes ctx [script] = inheritVars ctx $ allocVars ctx script
+peerScopes ctx@(scope, prevScope, pos, _) (script:scripts) 
+    = peerScopes (newScope + 1, prevScope, pos, newTable) scripts
+    where (newScope, _, _, newTable) = inheritVars ctx $ allocVars ctx script
+
+-- inherits missing variable positions from the previous scope 
+inheritVars :: VarCtx -> VarCtx -> VarCtx
+inheritVars (scope, prevScope, _, _) (a, b, c, table) = (a, b, c, newTable)
+    where 
+        vars     = findRow scope table
+        prevVars = findRow prevScope table
+        newVars  = filterCells prevVars vars
+        newTable = updateRow scope newVars table
+
+-- adds a variable position to the current scope
+allocVar :: VarCtx -> String -> VarCtx
+allocVar (scope, prevScope, pos@(depth, offset), table) name = newCtx
+    where 
+        newTable = insertCell scope name pos table
+        newCtx   = (scope, prevScope, (depth, offset + 1), newTable)
+
+-----------------------------------------------------------------------------
+-- type checking
+-----------------------------------------------------------------------------
 
 data Error 
     = InvalidType   SourcePos String    -- applying operation to an invalid type
@@ -33,51 +93,3 @@ data Error
     | MissingDecl   SourcePos String    -- calling non-existent entity
     | EmptyDecl     SourcePos String    -- variable decl. with no type and value
     | NoReturn      SourcePos           -- function decl. without return
-    deriving Show
-
-initScope :: Scope
-initScope = (0, 0)
-
-initContext :: VarMap
-initContext = Map.insert initScope Map.empty (Map.empty)
-
-incScope :: Scope -> Scope
-incScope (a, b) = (a+1, b)
-
-decScope :: Scope -> Scope
-decScope (a, b) = (a-1, b)
-
-insertVar :: Scope -> VarName -> VarCoord -> VarMap -> VarMap
-insertVar scope varName varCoord varMap
-            = Map.insert scope (Map.insert varName varCoord (Map.findWithDefault Map.empty scope varMap)) varMap
-
-findVar :: Scope -> String -> VarMap -> Bool
-findVar scope varName varMap
-        | isJust query = True
-        | otherwise = False
-        where query = Map.lookup varName (fromJust (Map.lookup scope varMap))
-
-traverseContext :: Scope -> VarName -> VarMap -> Bool
-traverseContext (-1,0) _ _ = False
-traverseContext scope varName varMap
-                      | findVar scope varName varMap = True
-                      | otherwise = traverseContext (decScope scope) varName varMap
-
--- TODO: get right position
-initElaborate :: Script -> ElabResult -> ElabResult
-initElaborate [] context = error $ show context
-initElaborate ((VarDecl def maybeExpr):xs) (Right (Context scope varMap)) = initElaborate xs $ Right $ Context scope (insertVar scope (fst def) (1,1) varMap)
-initElaborate ((VarAssign name expr):xs) context@(Right (Context scope varMap))
-                                        | traverseContext scope name varMap = initElaborate xs context
-                                        | otherwise = Left $ MissingDecl (newPos "" 1 1) "Calling non-existent entity!"
-
-elaborate :: Script -> ElabResult
-elaborate script = initElaborate script (Right $ Context initScope initContext)
-
--- Should give an error because y wasn't declared
-steasy :: Script
-steasy = tryParse script "let x = 2; x = 4; y = 5;"
-
--- Should give an error because y in different scope + should change x = 1 from scope (0,0)
-sthard :: Script
-sthard = tryParse script "let x = 2; if true { let x = 5; let y = 2; } else { y = 4; for i in 1..3 { x = 1; } }"

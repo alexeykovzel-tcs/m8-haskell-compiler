@@ -6,30 +6,33 @@ import Sprockell
 import Elaborator
 import Data.Maybe
 import Data.Char
+import Table (tableToMap)
 import Parser (VarName, FunName)
 import qualified Parser as AST
 import qualified Data.Map as Map
 
--- pointers to function labels
-type FunMap = Map.Map FunName CodeAddr
+type VarMap = Map.Map ScopeID (Map.Map VarName VarPos) 
+type Scope = (ScopeID, Depth)
 
 data Context = Ctx {
-    scope :: Scope,          -- current scope 
-    funMap :: FunMap,        -- maps function names to ASTs
-    varMap :: VarMap,        -- maps variables to coords by scope
-    freeRegs  :: [RegAddr]   -- currently free registers
+    scope :: Scope,
+    varMap :: VarMap,
+    freeRegs  :: [RegAddr]
 }
 
------------------------------------------------------------------------------
--- script compilation
------------------------------------------------------------------------------
-
-compile :: Context -> AST.Script -> [Instruction]
-compile ctx prog = preCompile ++ compileScript ctx prog ++ [EndProg]
+compile :: String -> [Instruction]
+compile code = preCompile ++ compileScript ctx prog ++ [EndProg]
+    where
+        prog = AST.tryParse AST.script code
+        ctx = Ctx (0, 1) (tableToMap $ varTable prog) userRegs
 
 -- TODO: Build "main" activation record
 preCompile :: [Instruction]
 preCompile = [Load (ImmValue 0) regArp]
+
+-----------------------------------------------------------------------------
+-- script compilation
+-----------------------------------------------------------------------------
 
 compileScript :: Context -> AST.Script -> [Instruction]
 compileScript ctx [] = []
@@ -88,8 +91,6 @@ compileStmt ctx stmt = case stmt of
     -- AST.ArrInsert name idx expr -> []
 
     where (reg2, ctx2) = occupyReg ctx
-
------------------------------------------------------------------------------
 
 compileVar :: Context -> VarName -> AST.Expr -> [Instruction]
 compileVar ctx name expr = exprToReg ++ varToMem
@@ -155,8 +156,6 @@ compileExpr ctx expr reg = case expr of
     -- AST.FunCall name args -> []
     -- AST.Lambda args script   -> []
 
------------------------------------------------------------------------------
-
 -- compiles a binary operation
 compileBin :: Context -> AST.Expr -> AST.Expr 
            -> RegAddr -> Operator -> [Instruction]
@@ -169,14 +168,14 @@ compileBin ctx e1 e2 reg op =
         c2 = compileExpr ctx2 e2 reg2
 
 -----------------------------------------------------------------------------
--- variable management
+-- variable instructions
 -----------------------------------------------------------------------------
 
 -- loads variable data from memory to a register
 loadVar :: Context -> VarName -> RegAddr -> [Instruction]
 loadVar ctx name reg = arpToReg ++ valToReg
     where 
-        (depth, offset) = varCoord ctx name
+        (depth, offset) = varPos ctx name
         (reg2, ctx2) = occupyReg ctx
         arpToReg = depthArp ctx2 depth reg2
         valToReg = loadAI ctx2 reg2 offset reg
@@ -185,7 +184,7 @@ loadVar ctx name reg = arpToReg ++ valToReg
 updateVar :: Context -> VarName -> RegAddr -> [Instruction]
 updateVar ctx name reg = arpToReg ++ varToMem
     where
-        (depth, offset) = varCoord ctx name
+        (depth, offset) = varPos ctx name
         (reg2, ctx2) = occupyReg ctx
         arpToReg = depthArp ctx2 depth reg2
         varToMem = storeAI ctx2 reg reg2 offset
@@ -204,9 +203,9 @@ depthArp ctx depth reg = loadArp ctx depthDiff reg
         depthDiff = depth - scopeDepth
         (_, scopeDepth) = scope ctx
 
--- finds a variable coordinate in memory
-varCoord :: Context -> VarName -> VarCoord
-varCoord (Ctx (scopeId, _) _ varMap _) name = result
+-- finds a variable position in memory
+varPos :: Context -> VarName -> VarPos
+varPos (Ctx (scopeId, _) varMap _) name = result
     where 
         scopeVarMap = fromJust $ Map.lookup scopeId varMap
         result    = fromJust $ Map.lookup name scopeVarMap
@@ -221,7 +220,7 @@ loadArp ctx depth reg = upperArps ++ prevArp
         prevArp = loadAI ctx reg (-1) reg
 
 -----------------------------------------------------------------------------
--- instructions with registers
+-- register instructions
 -----------------------------------------------------------------------------
 
 -- reg0         always zero
@@ -237,7 +236,7 @@ userRegs = [regB, regC, regD, regE, regF]
 
 -- occupies a free register
 occupyReg :: Context -> (RegAddr, Context)
-occupyReg (Ctx s f v (r:rs)) = (r, Ctx s f v rs)
+occupyReg (Ctx s v (r:rs)) = (r, Ctx s v rs)
 
 -- finds a free register
 findReg :: Context -> RegAddr

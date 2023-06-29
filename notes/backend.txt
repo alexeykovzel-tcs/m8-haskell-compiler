@@ -9,29 +9,6 @@
 | (1,0) | (1,4) | (1,8) |
 | (1,0) | (2,0) | (2,4) |
 
-### Procedure linkage ###
-
-Precall:
-What the caller does to prepare the call
-- Caller's environment: arguments, return address, return value
-- Stores addressability (incl. global display)
-- Saves caller-saves registers
-
-Prologue:
-What the callee does to set up the local data
-- Reserves space for local data
-- Saves callee-saves registers
-
-Epilogue:
-What the callee does to prepare for return
-- Stores return value
-- Restores callee-saves registers
-
-Postcall:
-What the caller does to conclude the return
-- Restores addressability link
-- Restores caller-saves registers
-
 ### Activation Record (AR) ###
 
 - Local-data area
