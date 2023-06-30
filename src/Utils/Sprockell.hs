@@ -206,10 +206,6 @@ toScopeMap pathMap varMap = Map.mapWithKey getInfo varMap
         scopeSize varMap   = sumSeconds $ Map.elems varMap
         prevScope id       = fromMaybe (-1) (Map.lookup id pathMap)
 
--- updates context for the next scope
-inScopeCtx :: Context -> Context
-inScopeCtx = applyScope (\(id, depth) -> (id + 1, depth + 1))
-
 -- applies a function to the current scope
 applyScope :: (Scope -> Scope) -> Context -> Context
 applyScope apply (Ctx scope a b c) = Ctx (apply scope) a b c
@@ -217,14 +213,19 @@ applyScope apply (Ctx scope a b c) = Ctx (apply scope) a b c
 -----------------------------------------------------------------------------
 -- ugly code to find "else" context 
 
-elseCtx :: Context -> Context
-elseCtx ctx = applyScope (\(_, depth) -> (nextId, depth + 1)) ctx
+-- updates context for the next scope
+inScopeCtx :: Context -> Context
+inScopeCtx = applyScope (\(id, depth) -> (id + 1, depth + 1))
+
+inScopeCtx2 :: Context -> Context
+inScopeCtx2 ctx = applyScope apply ctx
     where 
-        nextId = scopeNext (id + 1) id $ scopePath ctx 
         (id, _) = ctxScope ctx
+        nextId = scopeNext (id + 1) id $ scopePath ctx 
+        apply (_, depth) = (nextId, depth + 1)
 
 scopeNext :: ScopeID -> ScopeID -> ScopePath -> ScopeID
-scopeNext c p path = nextNum c $ sort $ childScopes p path
+scopeNext child parent path = nextNum child $ sort $ childScopes parent path
 
 childScopes :: ScopeID -> ScopePath -> [ScopeID]
 childScopes _ [] = []
@@ -242,6 +243,4 @@ sumSeconds ((_, x):xs) = x + sumSeconds xs
 
 nextNum :: Integer -> [Integer] -> Integer
 nextNum x [] = error $ "no next number: " ++ show x 
-nextNum x (y:ys)
-    | x < y = y
-    | otherwise = nextNum x ys 
+nextNum x (y:ys) = if x < y then y else nextNum x ys 

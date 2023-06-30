@@ -78,17 +78,19 @@ allocVars script = varTable
 scriptVars :: VarCtx -> Script -> VarCtx
 scriptVars ctx []     = ctx
 scriptVars ctx (x:xs) = scriptVars nextCtx xs
-    where nextCtx = case x of
+    where 
+        ctx2 = nextScope ctx
+        nextCtx = case x of
             VarDecl var _      -> allocVar ctx var
-            ForLoop i _ body   -> allocVar (childVars ctx [body]) i
-            WhileLoop _ body   -> childVars ctx [body]
-            Condition _ a b    -> childVars ctx $ a : maybe [] pure b
+            ForLoop i _ body   -> scriptVars (allocVar ctx2 i) body
+            WhileLoop _ body   -> scriptVars ctx2 body
+            Condition _ a b    -> peerVars ctx2 $ a : maybe [] pure b
             _                  -> ctx
 
--- allocates variables for scripts on the next depth
-childVars :: VarCtx -> [Script] -> VarCtx
-childVars (scope, (depth, _), table) xs = peerVars newCtx xs
-    where newCtx = (scope + 1, (depth + 1, 0), table)
+-- increases depth and scope id
+nextScope :: VarCtx -> VarCtx
+nextScope (scope, (depth, _), table) = 
+    (scope + 1, (depth + 1, 0), table)
 
 -- allocates variables for scripts on the same depth
 peerVars :: VarCtx -> [Script] -> VarCtx

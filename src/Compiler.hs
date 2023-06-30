@@ -74,7 +74,7 @@ compileStmt ctx stmt = case stmt of
         -> cond ++ branch ++ ifBody ++ elseBody
         where
             ctxScp    = inScopeCtx ctx
-            ctxScp2   = ctx
+            ctxScp2   = inScopeCtx2 ctx
             cond      = compileCond ctx2 expr reg2
             branch    = [Branch reg2 $ Rel $ length ifBody + 1]
             ifBody    = inScope ctx (compileScript ctxScp ifScript) ++ skipElse
