@@ -1,11 +1,8 @@
 module Parser where
 
-import Text.ParserCombinators.Parsec
-import Text.Parsec.Char
-import Data.Maybe
-import Lexer
 import Test.QuickCheck as QC
-
+import Text.ParserCombinators.Parsec
+import Lexer
 
 -- TODO: Error handling.
 -- TODO: More testing.

@@ -1,11 +1,11 @@
-module Utils.Sprockell where
+module Common.Sprockell where
 
 import Sprockell
 import Data.Maybe
-import Data.Char
+import Data.Char (ord)
 import Data.List (sort)
 import Data.Map (Map)
-import qualified Data.Map as Map
+import qualified Data.Map as Map 
 
 type Offset     = Integer
 type Depth      = Integer
@@ -69,7 +69,7 @@ notBool :: Context -> RegAddr -> [Instruction]
 notBool ctx reg = [Compute Equal reg reg0 reg]
 
 -----------------------------------------------------------------------------
--- memory instructions
+-- memory management
 -----------------------------------------------------------------------------
 
 -- increments variable in memory
@@ -142,6 +142,8 @@ updateVarImm ctx name val =
     (loadImm val reg2) : (updateVar ctx2 name reg2)
     where (reg2, ctx2) = occupyReg ctx
 
+-----------------------------------------------------------------------------
+
 -- loads data pointer at scope depth
 loadDP :: Context -> Depth -> RegAddr -> [Instruction]
 loadDP ctx depth reg = 
@@ -159,7 +161,7 @@ locateVar (Ctx (scopeId, _) scopeMap _ _) name = varPos
         (varPos, _)    = fromJust $ Map.lookup name varMap
 
 -----------------------------------------------------------------------------
--- scope instructions
+-- scope management
 -----------------------------------------------------------------------------
 
 -- returns offset from scope at given depth 
@@ -206,13 +208,6 @@ toScopeMap pathMap varMap = Map.mapWithKey getInfo varMap
         scopeSize varMap   = sumSeconds $ Map.elems varMap
         prevScope id       = fromMaybe (-1) (Map.lookup id pathMap)
 
--- applies a function to the current scope
-applyScope :: (Scope -> Scope) -> Context -> Context
-applyScope apply (Ctx scope a b c) = Ctx (apply scope) a b c
-
------------------------------------------------------------------------------
--- ugly code to find "else" context 
-
 -- updates context for the next scope
 inScopeCtx :: Context -> Context
 inScopeCtx = applyScope (\(id, depth) -> (id + 1, depth + 1))
@@ -223,6 +218,10 @@ inScopeCtx2 ctx = applyScope apply ctx
         (id, _) = ctxScope ctx
         nextId = scopeNext (id + 1) id $ scopePath ctx 
         apply (_, depth) = (nextId, depth + 1)
+
+-- applies a function to the current scope
+applyScope :: (Scope -> Scope) -> Context -> Context
+applyScope apply (Ctx scope a b c) = Ctx (apply scope) a b c
 
 scopeNext :: ScopeID -> ScopeID -> ScopePath -> ScopeID
 scopeNext child parent path = nextNum child $ sort $ childScopes parent path

@@ -1,7 +1,7 @@
 module Lexer where
 
 import qualified Text.ParserCombinators.Parsec.Token as Token
-import Text.ParserCombinators.Parsec.Language
+import Text.ParserCombinators.Parsec.Language (emptyDef)
 import Text.ParserCombinators.Parsec
 
 -----------------------------------------------------------------------------

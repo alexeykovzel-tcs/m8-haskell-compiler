@@ -3,11 +3,9 @@
 module Compiler (compile) where
 
 import Sprockell
-import Elaborator
-import Data.Maybe
-import Utils.Table (tableToMap)
-import Utils.Sprockell
-import Debug.Trace (trace)
+import Common.Sprockell
+import Common.Table (tableToMap)
+import Scopes
 import qualified Parser as AST
 import qualified Data.Map as Map
 

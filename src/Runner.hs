@@ -1,12 +1,8 @@
 module Runner where
 
 import Sprockell
-import Elaborator
 import Compiler
-import Data.Maybe
 import Control.Monad (join)
-import qualified Parser as AST
-import qualified Data.Map as Map
 
 runFile :: FilePath -> IO()
 runFile file = join $ runProg <$> readFile file
