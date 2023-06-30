@@ -1,0 +1,1 @@
+let a; thread_id(a); print(a);

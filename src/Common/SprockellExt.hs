@@ -205,8 +205,8 @@ getScopeInfo :: Context -> ScopeID -> ScopeInfo
 getScopeInfo ctx scope = fromJust $ Map.lookup scope $ scopeMap ctx
 
 -- puts instructions inside a scope
-inScope :: Context -> [Instruction] -> [Instruction]
-inScope ctx body = (updateDP ctx 1) ++ body ++ (updateDP ctx $ -1)
+putInScope :: Context -> [Instruction] -> [Instruction]
+putInScope ctx body = (updateDP ctx 1) ++ body ++ (updateDP ctx $ -1)
 
 -- updates register with a data pointer
 updateDP :: Context -> Integer -> [Instruction]
