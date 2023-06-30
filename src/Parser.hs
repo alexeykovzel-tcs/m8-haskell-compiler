@@ -4,9 +4,6 @@ import Test.QuickCheck as QC
 import Text.ParserCombinators.Parsec
 import Lexer
 
--- TODO: Error handling.
--- TODO: More testing.
-
 -----------------------------------------------------------------------------
 -- parser usage
 -----------------------------------------------------------------------------
@@ -35,12 +32,13 @@ data Statement
     | ForLoop       VarDef LoopIter Script
     | WhileLoop     Expr Script
     | Condition     Expr Script (Maybe Script)
+    | InScope       Script
     | ReturnVal     Expr
     | Action        Expr
     deriving Show
 
 data LoopIter
-    = IterRange     Integer Integer
+    = IterRange     Expr Expr
     | IterArr       [Value]
     | IterVar       VarName
     deriving Show
@@ -53,6 +51,7 @@ statement =
         varDecl         -- e.g. let x: Int;
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
+    <|> inScope
     <|> funDef          -- e.g. fun increment(x: Int) -> Int { }
     <|> forLoop         -- e.g. for x: Int in 2..10 { }
     <|> whileLoop       -- e.g. while x < 3 { print(x); }
@@ -79,6 +78,9 @@ arrInsert = ArrInsert
     <*  symbol "=" <*> expr 
     <*  semi
 
+inScope :: Parser Statement
+inScope = InScope <$> braces script
+
 funDef :: Parser Statement
 funDef = FunDef
     <$  reserved "fun" <*> name
@@ -93,10 +95,12 @@ forLoop = ForLoop
     <*> braces script
 
 loopIter :: Parser LoopIter
-loopIter = 
-        IterRange <$> integer <* symbol ".." <*> integer
-    <|> IterArr   <$> array
-    <|> IterVar   <$> name
+loopIter = IterRange <$> expr <* symbol ".." <*> expr
+
+-- TODO: uncomment when implemented:
+
+-- <|> IterArr   <$> array
+-- <|> IterVar   <$> name
 
 whileLoop :: Parser Statement
 whileLoop = WhileLoop

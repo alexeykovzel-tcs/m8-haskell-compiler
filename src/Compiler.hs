@@ -3,23 +3,19 @@
 module Compiler (compile) where
 
 import Sprockell
-import Common.Sprockell
+import Common.SprockellExt
 import Common.Table (tableToMap)
-import Scopes
+import PreCompiler
+import PostParser
 import qualified Parser as AST
 import qualified Data.Map as Map
 
+-- compiles string into the SpriL language
 compile :: String -> [Instruction]
 compile code = initDP ++ progASM ++ [EndProg]
     where
-        prog    = AST.tryParse AST.script code
-        progASM = compileScript (initCtx prog) prog
-
-initCtx :: AST.Script -> Context
-initCtx prog = Ctx (0, 1) scopeMap path userRegs
-    where
-        (varTable, path) = scopeCtx prog
-        scopeMap = toScopeMap (Map.fromList path) (tableToMap varTable)
+        prog     = postParse $ AST.tryParse AST.script code
+        progASM  = compileScript (initCtx prog) prog
 
 -----------------------------------------------------------------------------
 -- script compilation
@@ -35,63 +31,47 @@ compileStmt ctx stmt = case stmt of
     AST.VarDecl (name, _) Nothing      -> []
     AST.VarDecl (name, _) (Just expr)  -> compileVarExpr ctx name expr
     AST.VarAssign name expr            -> compileVarExpr ctx name expr
-    AST.Action expr                    -> compileExpr ctx2 expr reg2
-    
-    AST.WhileLoop expr script 
-        -> cond ++ branch ++ body ++ jumpBack
+    AST.InScope script                 -> simpleScope ctx script
+    AST.Action expr                    -> compileVoidExpr ctx expr
+
+    AST.WhileLoop expr script -> cond ++ body
         where
-            cond      = compileCond ctx2 expr reg2 
-            branch    = [Branch reg2 $ Rel relSkip]
-            relSkip   = (length body) + 2
-            body      = inScope ctx $ compileScript (inScopeCtx ctx) script
-            jumpBack  = [Jump $ Rel relBack]
-            relBack   = - (length body) - (length branch) - (length cond)
-    
-    -- TODO: Update ARP
-    AST.ForLoop (iter, _) (AST.IterRange from to) script 
-        -> inScope ctx $ saveIter ++ loadIter ++ branch 
-                          ++ body ++ incrIter ++ jumpBack
+            cond  = skipCond ctx expr body
+            body  = simpleScope ctx script ++ jumpBack [body, cond]
+
+    AST.Condition expr ifScript Nothing -> cond ++ ifBody
         where
-            ctxScp    = inScopeCtx ctx
-            saveIter  = updateVarImm ctxScp iter from
-            loadIter  = loadVar ctxScp2 iter reg2
-            branch    = [loadImm to reg3,             -- load 'to'
-                         Compute Gt reg2 reg3 reg3,   -- check if 'i' > 'to'
-                         Branch reg3 $ Rel relSkip]   -- skip if true
-            body      = compileScript ctxScp script
-            incrIter  = incrMem ctxScp iter
-            jumpBack  = [Jump $ Rel relBack]
-            reg3      = findReg ctxScp2
-            relSkip   = (length body) + (length incrIter) + 2
-            relBack   = - (length body) - (length incrIter) 
-                        - (length loadIter) - (length branch)
-            (reg2, ctxScp2) = occupyReg ctxScp
+            cond    = skipCond ctx expr ifBody
+            ifBody  = simpleScope ctx ifScript
 
-    -- compileScript does not store last scope... 
-    AST.Condition expr ifScript elseScript 
-        -> cond ++ branch ++ ifBody ++ elseBody
+    AST.Condition expr ifScript (Just elseScript) 
+        -> cond ++ ifBody ++ elseBody
         where
-            ctxScp    = inScopeCtx ctx
-            ctxScp2   = inScopeCtx2 ctx
-            cond      = compileCond ctx2 expr reg2
-            branch    = [Branch reg2 $ Rel $ length ifBody + 1]
-            ifBody    = inScope ctx (compileScript ctxScp ifScript) ++ skipElse
-            elseBody  = maybe [] (inScope ctx . compileScript ctxScp2) elseScript
-            skipElse  = maybe [] (\_ -> jumpElse) elseScript
-            jumpElse  = [Jump $ Rel $ length elseBody + 1]
+            cond      = skipCond ctx expr ifBody
+            ifBody    = simpleScope ctx ifScript ++ jumpOver elseBody
+            elseBody  = elseScope ctx elseScript
 
-    where (reg2, ctx2) = occupyReg ctx
+-- sets context scope for a script
+simpleScope :: Context -> AST.Script -> [Instruction]
+simpleScope ctx = inScope ctx . compileScript (inScopeCtx ctx)
 
-compileCond :: Context -> AST.Expr -> RegAddr -> [Instruction]
-compileCond ctx expr reg = 
-    (compileExpr ctx expr reg) ++ (notBool ctx reg)
+-- sets context scope for the "else" script
+elseScope :: Context -> AST.Script -> [Instruction]
+elseScope ctx = inScope ctx . compileScript (inScopeCtxElse ctx)
 
-compileVarExpr :: Context -> VarName -> AST.Expr -> [Instruction]
+-- compiles an expression, which result is stored in a variable
+compileVarExpr :: Context -> AST.VarName -> AST.Expr -> [Instruction]
 compileVarExpr ctx name expr = exprToReg ++ varToMem
     where 
         (reg2, ctx2) = occupyReg ctx
         exprToReg    = compileExpr ctx2 expr reg2
         varToMem     = updateVar ctx2 name reg2
+
+-- compiles an expression, which result is ignored
+compileVoidExpr :: Context -> AST.Expr -> [Instruction]
+compileVoidExpr ctx expr = 
+    let (reg2, ctx2) = occupyReg ctx 
+    in compileExpr ctx2 expr reg2 
 
 -----------------------------------------------------------------------------
 -- expression compilation
@@ -112,7 +92,7 @@ compileExpr ctx expr reg = case expr of
     AST.Both    e1 e2 -> compileBin ctx e1 e2 reg And
     AST.OneOf   e1 e2 -> compileBin ctx e1 e2 reg Or
 
-    -- load variable value
+    -- loads variable value
     AST.Var name -> loadVar ctx name reg
 
     -- TODO: Arrays, String and None
@@ -122,33 +102,36 @@ compileExpr ctx expr reg = case expr of
     AST.Fixed (AST.Arr vals)  -> []
     AST.Fixed (AST.Text text) -> []
 
-    AST.Ternary expr e1 e2
-        -> cond ++ branch ++ ifBody ++ elseBody
+    AST.Ternary expr1 expr2 expr3
+        -> cond ++ ifBody ++ elseBody
         where
-            cond      = compileCond ctx expr reg
-            branch    = [Branch reg $ Rel $ length ifBody + 1]
-            ifBody    = compileExpr ctx e1 reg ++ jumpElse
-            elseBody  = compileExpr ctx e2 reg
-            jumpElse  = [Jump $ Rel $ length elseBody + 1]
+            cond      = skipCond ctx expr1 ifBody
+            ifBody    = compileExpr ctx expr2 reg ++ jumpOver elseBody
+            elseBody  = compileExpr ctx expr3 reg
 
     -- embedded functions
     AST.FunCall "thread_create" ((AST.Fixed (AST.Int threadId)):_)
-        -> writeString ctx ("create thread: " ++ show threadId ++ "\n")
+        -> printStrLn ctx ("create thread: " ++ show threadId)
 
     AST.FunCall "thread_join" ((AST.Fixed (AST.Int threadId)):_)
-        -> writeString ctx ("join thread: " ++ show threadId ++ "\n")
+        -> printStrLn ctx ("join thread: " ++ show threadId)
  
     AST.FunCall "print" ((AST.Fixed (AST.Text msg)):_)
-        -> writeString ctx (msg ++ "\n")
+        -> printStrLn ctx msg
 
     AST.FunCall "print" (expr:_)
         -> compileExpr ctx expr reg 
         ++ [WriteInstr reg numberIO]
 
--- compiles a binary operation
-compileBin :: Context -> AST.Expr -> AST.Expr 
-           -> RegAddr -> Operator -> [Instruction]
+-- compiles a skip condition from an expression
+skipCond :: Context -> AST.Expr -> [Instruction] -> [Instruction] 
+skipCond ctx expr body = let (reg2, ctx2) = occupyReg ctx in
+       compileExpr ctx2 expr reg2
+    ++ notBool ctx2 reg2
+    ++ branchOver reg2 body
 
+-- compiles a binary operation
+compileBin :: Context -> AST.Expr -> AST.Expr -> RegAddr -> Operator -> [Instruction]
 compileBin ctx e1 e2 reg op = 
     c1 ++ c2 ++ [Compute op reg reg2 reg]
     where 

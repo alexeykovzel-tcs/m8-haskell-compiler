@@ -1,34 +1,37 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Scopes (scopeCtx) where
+module PreCompiler (initCtx) where
 
 import Parser
+import PostParser
 import Common.Table
+import Common.SprockellExt
+import qualified Data.Map as Map
+import Control.Monad (join)
 
-type ScopeID   = Integer
 type ScopeCtx  = (VarTable, ScopePath)
 
-scopeCtx :: Script -> ScopeCtx
-scopeCtx script = (varTable, scopePath)
-    where 
-        scopePath  = walkScopes script
-        varTable   = inheritVars (allocVars script) scopePath
+-- builds the initial context for compilation
+initCtx :: Script -> Context
+initCtx prog = Ctx mainScope scopeMap scopePath userRegs
+    where
+        scopePath  = walkScopes prog
+        varTable   = allocVars prog scopePath
+        scopeMap   = toScopeMap (Map.fromList scopePath) (tableToMap varTable)
+        mainScope  = (0, 1)
 
-testScopeCtx :: FilePath -> IO()
-testScopeCtx file = do
-    (varTable, scopePath) <- scopeCtx . tryParse script <$> readFile file
-    putStrLn ""
-    printTable varTable
-    putStrLn "\nscope path:"
-    putStrLn $ show scopePath
-    putStrLn ""
+-- prints a table with variable positions after parsing a file
+printVarTable :: FilePath -> IO()
+printVarTable file = join $ printTable <$> (allocVars <$> prog <*> scopePath)
+    where 
+        prog = postParse <$> (tryParse script <$> readFile file) 
+        scopePath = walkScopes <$> prog
 
 -----------------------------------------------------------------------------
 -- scope hierarchy
 -----------------------------------------------------------------------------
 
-type ScopePath = [(ScopeID, ScopeID)]
-
+-- stores data about child-parent relationships between scopes 
 walkScopes :: Script -> ScopePath
 walkScopes script = reverse path
     where (path, _) = scopes ([], 0) script 
@@ -43,7 +46,7 @@ instance ScopeWalker Statement where
     scopes ctx@(path, last) stmt = 
         let nextCtx = ((last + 1, last) : path, last + 1) 
         in case stmt of
-            ForLoop _ _ body -> scopes nextCtx body
+            InScope     body -> scopes nextCtx body 
             WhileLoop _ body -> scopes nextCtx body
             Condition _ ifBody elseBody -> 
                 let 
@@ -57,17 +60,12 @@ instance ScopeWalker Statement where
 -- variable positions in memory
 -----------------------------------------------------------------------------
 
-type Offset      = Integer
-type Depth       = Integer
-
-type VarSize     = Integer
-type VarPos      = (Depth, Offset)
 type VarTable    = Table ScopeID VarName (VarPos, VarSize)
 type VarCtx      = (ScopeID, VarPos, VarTable)
 
--- builds a tables with variable positions in memory
-allocVars :: Script -> VarTable
-allocVars script = varTable
+-- builds a table with variable positions in memory
+allocVars :: Script -> ScopePath -> VarTable
+allocVars script scopePath = inheritVars varTable scopePath
     where (_, _, varTable) = scriptVars (0, (1, 0), []) script
 
 -- allocates variables for a given script
@@ -78,7 +76,7 @@ scriptVars ctx (x:xs) = scriptVars nextCtx xs
         ctx2 = nextScope ctx
         nextCtx = case x of
             VarDecl var _      -> allocVar ctx var
-            ForLoop i _ body   -> scriptVars (allocVar ctx2 i) body
+            InScope body       -> scriptVars ctx2 body 
             WhileLoop _ body   -> scriptVars ctx2 body
             Condition _ a b    -> peerVars ctx2 $ a : maybe [] pure b
             _                  -> ctx
