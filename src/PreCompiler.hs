@@ -96,9 +96,15 @@ peerVars ctx@(_, pos, _) (x:xs) =
 
 -- allocates a variable in the current scope
 allocVar :: VarCtx -> VarDef -> VarCtx
-allocVar (scope, pos@(depth, offset), table) (name, _) =
-    let newTable = insertCell scope name (pos, 1) table
-    in (scope, (depth, offset + 1), newTable)
+allocVar (scope, pos@(depth, offset), table) (name, dataType) =
+    (scope, (depth, offset + varSize), newTable)
+    where 
+        newTable = insertCell scope name (pos, varSize) table
+        varSize = measureVar dataType
+
+measureVar :: DataType -> VarSize
+measureVar (ArrType _ size) = size
+measureVar _ = 1
 
 -- inherits missing variables from the previous scopes
 inheritVars :: VarTable -> ScopePath -> VarTable

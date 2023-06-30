@@ -1,1 +1,3 @@
-let a; thread_id(a); print(a);
+let a: Int; 
+thread_id(a); 
+print(a);

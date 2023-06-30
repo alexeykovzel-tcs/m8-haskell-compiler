@@ -1,6 +1,6 @@
-let x = 1;
-let y = 2;
-let z = 3;
+let x: Int = 1;
+let y: Int = 2;
+let z: Int = 3;
 
 print("-----------------");
 
@@ -10,23 +10,23 @@ print(z); // 3
 
 print("-----------------");
 
-for i in 1..2 {
-    let y = i * 2;
+// 1st iter: 2, 3, 4, 5, 4
+// 2nd iter: 4, 5, 6, 5, 4, 6, 7, 6, 5, 4
+
+for i: Int in 1..2 {
+    let y: Int = i * 2;
     print(y);
 
-    // 1st iter: 2, 3, 4, 5, 4
-    // 2nd iter: 4, 5, 6, 5, 4, 6, 7, 6, 5, 4
-
-    for j in 1..2 {
-        let z = j + y;
+    for j: Int in 1..2 {
+        let z: Int = j + y;
         print(z);
 
         if z > 3 {
-            let x = z + 1;
+            let x: Int = z + 1;
             print(x);
 
             while x > 4 {
-                let y = x - 1;
+                let y: Int = x - 1;
                 print(y);
                 x = x - 1;
             }

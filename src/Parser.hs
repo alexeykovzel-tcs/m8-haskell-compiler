@@ -129,6 +129,7 @@ data Expr
     = FunCall       FunName [Expr]
     | Ternary       Expr Expr Expr
     | Lambda        ArgsDef Script
+    | ArrAccess     VarName Integer
     | Both          Expr Expr
     | OneOf         Expr Expr
     | Eq            Expr Expr
@@ -144,8 +145,8 @@ data Expr
     deriving Show
 
 expr :: Parser Expr
-expr =  try ternary 
-    <|> operation 
+expr =  try ternary
+    <|> operation
     <?> "expression"
 
 ternary :: Parser Expr
@@ -185,7 +186,13 @@ factor = Parser.Fixed <$> value
     <|> try lambda          -- e.g. (x: Int) -> { ... }
     <|> parens expr         -- e.g. (2 + 3)
     <|> try funCall         -- e.g. print("Hello")
+    <|> try arrAccess
     <|> Var <$> name
+
+arrAccess :: Parser Expr
+arrAccess = ArrAccess
+    <$> name
+    <*> brackets integer
 
 lambda :: Parser Expr
 lambda = Lambda 
@@ -208,12 +215,12 @@ data DataType
     = StrType
     | BoolType
     | IntType
-    | ArrType DataType (Maybe ArrSize)
+    | ArrType DataType ArrSize
     deriving Show
 
 dataType :: Parser DataType
 dataType = foldl ArrType <$> baseType <*> arrDecl
-    where arrDecl = many $ brackets $ nullable integer 
+    where arrDecl = many $ brackets $ integer 
 
 baseType :: Parser DataType
 baseType = StrType    <$  reserved "String"
@@ -317,13 +324,13 @@ autoScript = QC.generate (QC.resize 3 QC.arbitrary)
 -- other parsers
 -----------------------------------------------------------------------------
 
-type VarDef = (VarName, Maybe DataType)
+type VarDef = (VarName, DataType)
 
 type ArgsDef = [VarDef]
 
 varDef :: Parser VarDef
 varDef = (,) <$> name <*> typeDecl
-    where typeDecl = nullable $ colon *> dataType
+    where typeDecl = colon *> dataType
 
 argsDef :: Parser ArgsDef
 argsDef = varDef `sepBy` comma

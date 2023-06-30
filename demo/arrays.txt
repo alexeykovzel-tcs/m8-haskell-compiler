@@ -1,0 +1,14 @@
+let x: Int[5] = [1, 2, 3, 4, 5];
+let y: Bool[3] = [false, true, false];
+
+print(x[2]); // 3
+print(y[1]); // 1
+
+y[2] = true;
+
+print(x[4]); // 5
+
+x[1] = 10 + 2;
+
+print(x[1]); // 12
+print(y[2]); // 1

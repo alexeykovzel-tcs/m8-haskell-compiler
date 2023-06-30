@@ -1,6 +1,7 @@
 module Common.SprockellExt where
 
 import Sprockell
+import Debug.Trace
 import Data.Maybe
 import Data.Char (ord)
 import Data.List (sort)
@@ -92,13 +93,13 @@ incrMem ctx name = addMem ctx name 1
 -- adds value to a variable in memory
 addMem :: Context -> VarName -> Integer -> [Instruction]
 addMem ctx name val = let (reg2, ctx2) = occupyReg ctx in
-       loadVar    ctx2 name reg2
-    ++ addImm     ctx2 val  reg2 
-    ++ updateVar  ctx2 name reg2
+       loadVar  ctx2 name reg2 0
+    ++ addImm   ctx2 val  reg2 
+    ++ putVar   ctx2 name reg2 0
 
 -- loads from memory with an offset
-offsetLoad :: Context -> RegAddr -> Offset -> RegAddr -> [Instruction]
-offsetLoad ctx reg1 offset reg2 = 
+loadAI :: Context -> RegAddr -> Offset -> RegAddr -> [Instruction]
+loadAI ctx reg1 offset reg2 = 
     [
         loadImm offset reg2,
         Compute Add reg1 reg2 reg2,
@@ -106,12 +107,12 @@ offsetLoad ctx reg1 offset reg2 =
     ]
 
 -- stores to memory with an offset
-offsetStore :: Context -> RegAddr -> RegAddr -> Offset -> [Instruction]
-offsetStore ctx reg1 reg2 offset =
+storeAI :: Context -> RegAddr -> RegAddr -> Offset -> [Instruction]
+storeAI ctx reg1 reg2 offset =
     [
         loadImm offset reg3,
-        Compute Add reg3 reg2 reg2,
-        Store reg1 (IndAddr reg2)
+        Compute Add reg3 reg2 reg3,
+        Store reg1 (IndAddr reg3)
     ]
     where reg3 = findReg ctx
 
@@ -136,28 +137,33 @@ writeChar reg c = [Load (ImmValue $ ord c) reg, WriteInstr reg charIO]
 -----------------------------------------------------------------------------
 
 -- loads variable data from memory to a register
-loadVar :: Context -> VarName -> RegAddr -> [Instruction]
-loadVar ctx name reg = dpToReg ++ valToReg
+loadVar :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
+loadVar ctx name reg idx = dpToReg ++ valToReg
     where 
         (depth, offset) = locateVar ctx name
         (reg2, ctx2)    = occupyReg ctx
         dpToReg         = loadDP ctx2 depth reg2
-        valToReg        = offsetLoad ctx2 reg2 offset reg
+        valToReg        = loadAI ctx2 reg2 (offset + idx) reg
 
--- updates a variable in memory from a register
-updateVar :: Context -> VarName -> RegAddr -> [Instruction]
-updateVar ctx name reg = dpToReg ++ varToMem
+-- updates variable from a register
+putVar :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
+putVar ctx name reg idx = dpToReg ++ varToMem
     where
         (depth, offset) = locateVar ctx name
         (reg2, ctx2)    = occupyReg ctx
         dpToReg         = loadDP ctx2 depth reg2
-        varToMem        = offsetStore ctx2 reg reg2 offset
+        varToMem        = storeAI ctx2 reg reg2 (offset + idx)
 
--- updates a variable in memory by value
-updateVarImm :: Context -> VarName -> Integer -> [Instruction]
-updateVarImm ctx name val = 
-    (loadImm val reg2) : (updateVar ctx2 name reg2)
-    where (reg2, ctx2) = occupyReg ctx
+putArrImm :: Context -> VarName -> [Integer] -> [Instruction]
+putArrImm ctx name vals = dpToReg ++ arrToMem
+    where
+        (depth, offset) = locateVar ctx name
+        (reg2, ctx2)    = occupyReg ctx
+        (reg3, ctx3)    = occupyReg ctx2
+        dpToReg         = loadDP ctx2 depth reg2
+        arrToMem        = foldl1 (++) $ map valToMem [0..length vals - 1]
+        valToMem idx    = loadImm (vals !! idx) reg3
+                        : storeAI ctx3 reg3 reg2 (offset + toInteger idx)
 
 -----------------------------------------------------------------------------
 

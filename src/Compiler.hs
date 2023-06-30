@@ -8,6 +8,7 @@ import Common.Table (tableToMap)
 import PreCompiler
 import PostParser
 import Parser
+import Debug.Trace
 import qualified Data.Map as Map
 
 -- compiles string into the SpriL language
@@ -29,10 +30,11 @@ compileStmt :: Context -> Statement -> [Instruction]
 compileStmt ctx stmt = case stmt of
 
     VarDecl (name, _) Nothing      -> []
-    VarDecl (name, _) (Just expr)  -> compileVarExpr ctx name expr
-    VarAssign name expr            -> compileVarExpr ctx name expr
+    VarDecl (name, _) (Just expr)  -> updateVar ctx name 0 expr
+    VarAssign name expr            -> updateVar ctx name 0 expr
+    ArrInsert name idx expr        -> updateVar ctx name idx expr
     InScope script                 -> simpleScope ctx script
-    Action expr                    -> compileVoidExpr ctx expr
+    Action expr                    -> voidExpr ctx expr
 
     WhileLoop expr script -> cond ++ body
         where
@@ -60,16 +62,17 @@ elseScope :: Context -> Script -> [Instruction]
 elseScope ctx = putInScope ctx . compileScript (inScopeCtxElse ctx)
 
 -- compiles an expression, which result is stored in a variable
-compileVarExpr :: Context -> VarName -> Expr -> [Instruction]
-compileVarExpr ctx name expr = exprToReg ++ varToMem
+updateVar :: Context -> VarName -> Integer -> Expr -> [Instruction]
+updateVar ctx name _ (Fixed (Arr vals)) = putArrImm ctx name (intVal <$> vals) 
+updateVar ctx name idx expr = exprToReg ++ varToMem
     where 
         (reg2, ctx2) = occupyReg ctx
         exprToReg    = compileExpr ctx2 expr reg2
-        varToMem     = updateVar ctx2 name reg2
+        varToMem     = putVar ctx2 name reg2 idx
 
 -- compiles an expression, which result is ignored
-compileVoidExpr :: Context -> Expr -> [Instruction]
-compileVoidExpr ctx expr = 
+voidExpr :: Context -> Expr -> [Instruction]
+voidExpr ctx expr = 
     let (reg2, ctx2) = occupyReg ctx 
     in compileExpr ctx2 expr reg2 
 
@@ -92,14 +95,10 @@ compileExpr ctx expr reg = case expr of
     Both    e1 e2 -> compileBin ctx e1 e2 reg And
     OneOf   e1 e2 -> compileBin ctx e1 e2 reg Or
 
-    Var name -> loadVar ctx name reg
+    Var name  -> loadVar ctx name reg 0
+    Fixed val -> [loadImm (intVal val) reg]
 
-    -- TODO: Arrays, String and None
-    Fixed (Int  val)  -> [loadImm val reg]
-    Fixed (Bool val)  -> [Load (ImmValue $ intBool val) reg]
-    Fixed (None)      -> [Load (ImmValue $ -1) reg]
-    Fixed (Arr vals)  -> []
-    Fixed (Text text) -> []
+    ArrAccess name idx -> loadVar ctx name reg idx
 
     Ternary expr1 expr2 expr3
         -> cond ++ ifBody ++ elseBody
@@ -109,7 +108,7 @@ compileExpr ctx expr reg = case expr of
             elseBody  = compileExpr ctx expr3 reg
 
     FunCall "thread_id" [Var name]
-        -> updateVar ctx name regSprID
+        -> putVar ctx name regSprID 0
 
     FunCall "thread_create" [Fixed (Int threadId)]
         -> printStrLn ctx ("create thread: " ++ show threadId)
@@ -123,6 +122,11 @@ compileExpr ctx expr reg = case expr of
     FunCall "print" [expr]
         -> compileExpr ctx expr reg 
         ++ [WriteInstr reg numberIO]
+
+intVal :: Parser.Value -> Integer
+intVal (Int val)    = val
+intVal (Bool val)   = intBool val
+intVal (None)       = -1
 
 -- compiles a skip condition from an expression
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 

@@ -30,7 +30,7 @@ instance PostParsable Statement where
     postParse (ForLoop i@(name, _) (IterRange from to) body) = 
         InScope [
             VarDecl i (Just $ from),
-            VarDecl ("_to", Nothing) (Just $ to),
+            VarDecl ("_to", IntType) (Just $ to),
             WhileLoop whileCond whileBody ]
         where 
             incrI     = VarAssign name $ Add (Var name) (Fixed $ Int 1)
