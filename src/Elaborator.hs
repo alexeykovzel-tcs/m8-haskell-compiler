@@ -3,6 +3,7 @@ module Elaborator where
 import Parser
 import Text.Parsec.Pos
 import Data.Maybe
+import Data.Typeable
 import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -122,6 +123,18 @@ checkVarAssign varName expr typeChecker
                 where (_, dataType)                   = fromJust $ findVar varName typeChecker 
                       (exprDataType, exprTypeChecker) = checkAction expr typeChecker
 
+checkForLoop :: VarDef -> LoopIter -> Script -> TypeChecker -> TypeChecker
+checkForLoop varType@(_, IntType) (IterRange left right) script typeChecker = scriptTypeChecker
+                where varDefTypeChecker = addVar varType $ incScope typeChecker
+                      (_, iterRangeTypeChecker) = checkIntOp left right varDefTypeChecker
+                      scriptTypeChecker = check script iterRangeTypeChecker
+checkForLoop (_, _) _ _ _ = error "InvalidType ForLoop"
+
+checkWhileLoop :: Expr -> Script -> TypeChecker -> TypeChecker
+checkWhileLoop expr script typeChecker
+                = check script $ incScope whileTypeChecker
+                where (_, whileTypeChecker) = checkAction expr typeChecker
+
 checkCondition :: Expr -> Script -> Maybe Script -> TypeChecker -> TypeChecker
 checkCondition expr ifScript elseScript typeChecker =
                 case (elseScript) of
@@ -134,6 +147,10 @@ check :: Script -> TypeChecker -> TypeChecker
 check [] typeChecker = decScope typeChecker
 check ((VarDecl varType maybeExpr):xs) typeChecker = check xs $ checkVarDecl varType maybeExpr typeChecker
 check ((VarAssign varName expr):xs) typeChecker = check xs $ checkVarAssign varName expr typeChecker
+check ((ArrInsert varName size expr):xs) typeChecker = error "ArrayInsert"
+check ((ForLoop varType loopIter script):xs) typeChecker 
+                = check xs $ checkForLoop varType loopIter script typeChecker
+check ((WhileLoop expr script):xs) typeChecker = check xs $ checkWhileLoop expr script typeChecker
 check ((Condition expr script maybeScript):xs) typeChecker 
                 = check xs $ checkCondition expr script maybeScript typeChecker
 check ((Action expr):xs) typeChecker = check xs $ snd $ checkAction expr typeChecker
@@ -150,7 +167,7 @@ elaborate script = check script initTypeChecker
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let x: Int = 5; let y: Int = 0; if x < y { } else { x = true; }"
+steasy = tryParse script "let array: Int[5]; let x: Int = 0; array[0] = 5;"
 
 initScope :: Scopes
 initScope = ((0,0), (0,0))
