@@ -1,9 +1,21 @@
-## Sprockell
+## How to use?
 
-To run a program in sprockell:
+Run the following command:
+
+```bash
+stack ghci src/Runner.hs
+```
+
+Then, you can have following options to test the compiler:
 
 ```haskell
-run [program]
+
+-- run program in a file
+runFile "demo/fib.txt"
+
+-- run program as a string
+runProg "for i in 1..3 { print (i); }" 
+
 ```
 
 where program is \[Instruction\]

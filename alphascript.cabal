@@ -15,14 +15,15 @@ extra-source-files:
 
 library
   exposed-modules:
-      Common.Sprockell
+      Common.SprockellExt
       Common.Table
       Compiler
       Elaborator
       Lexer
       Parser
+      PostParser
+      PreCompiler
       Runner
-      Scopes
   other-modules:
       Paths_alphascript
   hs-source-dirs:
@@ -40,13 +41,14 @@ library
 executable alphascript-exe
   main-is: Runner.hs
   other-modules:
-      Common.Sprockell
+      Common.SprockellExt
       Common.Table
       Compiler
       Elaborator
       Lexer
       Parser
-      Scopes
+      PostParser
+      PreCompiler
       Paths_alphascript
   hs-source-dirs:
       src

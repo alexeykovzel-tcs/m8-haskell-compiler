@@ -4,9 +4,6 @@ import Test.QuickCheck as QC
 import Text.ParserCombinators.Parsec
 import Lexer
 
--- TODO: Error handling.
--- TODO: More testing.
-
 -----------------------------------------------------------------------------
 -- parser usage
 -----------------------------------------------------------------------------
@@ -35,14 +32,13 @@ data Statement
     | ForLoop       VarDef LoopIter Script
     | WhileLoop     Expr Script
     | Condition     Expr Script (Maybe Script)
+    | InScope       Script
     | ReturnVal     Expr
     | Action        Expr
     deriving Show
 
-data LoopIter
-    = IterRange     Integer Integer
-    | IterArr       [Value]
-    | IterVar       VarName
+data LoopIter 
+    = IterRange Expr Expr
     deriving Show
 
 script :: Parser Script
@@ -53,6 +49,7 @@ statement =
         varDecl         -- e.g. let x: Int;
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
+    <|> inScope
     <|> funDef          -- e.g. fun increment(x: Int) -> Int { }
     <|> forLoop         -- e.g. for x: Int in 2..10 { }
     <|> whileLoop       -- e.g. while x < 3 { print(x); }
@@ -79,6 +76,9 @@ arrInsert = ArrInsert
     <*  symbol "=" <*> expr 
     <*  semi
 
+inScope :: Parser Statement
+inScope = InScope <$> braces script
+
 funDef :: Parser Statement
 funDef = FunDef
     <$  reserved "fun" <*> name
@@ -93,10 +93,7 @@ forLoop = ForLoop
     <*> braces script
 
 loopIter :: Parser LoopIter
-loopIter = 
-        IterRange <$> integer <* symbol ".." <*> integer
-    <|> IterArr   <$> array
-    <|> IterVar   <$> name
+loopIter = IterRange <$> expr <* symbol ".." <*> expr
 
 whileLoop :: Parser Statement
 whileLoop = WhileLoop
@@ -125,6 +122,7 @@ data Expr
     = FunCall       FunName [Expr]
     | Ternary       Expr Expr Expr
     | Lambda        ArgsDef Script
+    | ArrAccess     VarName Integer
     | Both          Expr Expr
     | OneOf         Expr Expr
     | Eq            Expr Expr
@@ -140,8 +138,8 @@ data Expr
     deriving Show
 
 expr :: Parser Expr
-expr =  try ternary 
-    <|> operation 
+expr =  try ternary
+    <|> operation
     <?> "expression"
 
 ternary :: Parser Expr
@@ -181,7 +179,13 @@ factor = Parser.Fixed <$> value
     <|> try lambda          -- e.g. (x: Int) -> { ... }
     <|> parens expr         -- e.g. (2 + 3)
     <|> try funCall         -- e.g. print("Hello")
+    <|> try arrAccess
     <|> Var <$> name
+
+arrAccess :: Parser Expr
+arrAccess = ArrAccess
+    <$> name
+    <*> brackets integer
 
 lambda :: Parser Expr
 lambda = Lambda 
@@ -204,12 +208,12 @@ data DataType
     = StrType
     | BoolType
     | IntType
-    | ArrType DataType (Maybe ArrSize)
+    | ArrType DataType ArrSize
     deriving Show
 
 dataType :: Parser DataType
 dataType = foldl ArrType <$> baseType <*> arrDecl
-    where arrDecl = many $ brackets $ nullable integer 
+    where arrDecl = many $ brackets $ integer 
 
 baseType :: Parser DataType
 baseType = StrType    <$  reserved "String"
@@ -301,10 +305,7 @@ instance QC.Arbitrary Value where
         pure None ]
 
 instance QC.Arbitrary LoopIter where
-    arbitrary = QC.oneof [
-        IterRange <$> QC.arbitrary <*> QC.arbitrary,
-        IterArr   <$> QC.listOf QC.arbitrary,
-        IterVar   <$> QC.arbitrary ]
+    arbitrary = QC.oneof [ IterRange <$> QC.arbitrary <*> QC.arbitrary ]
 
 autoScript :: IO Script
 autoScript = QC.generate (QC.resize 3 QC.arbitrary)
@@ -313,13 +314,13 @@ autoScript = QC.generate (QC.resize 3 QC.arbitrary)
 -- other parsers
 -----------------------------------------------------------------------------
 
-type VarDef = (VarName, Maybe DataType)
+type VarDef = (VarName, DataType)
 
 type ArgsDef = [VarDef]
 
 varDef :: Parser VarDef
 varDef = (,) <$> name <*> typeDecl
-    where typeDecl = nullable $ colon *> dataType
+    where typeDecl = colon *> dataType
 
 argsDef :: Parser ArgsDef
 argsDef = varDef `sepBy` comma
