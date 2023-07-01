@@ -16,8 +16,7 @@ languageDef = emptyDef {
         "*", "/", "%"                   -- factor operators
     ],
     Token.reservedNames   = [ 
-        "let", "struct", "fun", "for", "while", 
-        "thread_create", "thread_join", "if", "return",
+        "let", "struct", "fun", "for", "while", "if", "return",
         "Int", "String", "Bool", "None", "false", "true"
     ],
     Token.commentStart = "/*",
