@@ -37,10 +37,11 @@ addError error (Left errors) = Left $ error : errors
 findVar :: VarName -> TypeChecker -> Maybe VarDef
 findVar _ (Right (VarScopes ((-1, _), _) scopeData)) = Nothing
 findVar vName (Right (VarScopes scope@(currScope, _) scopeData)) 
+                    | isJust types == False = error "MissingDecl"
                     | isJust varType = varType
-                    | otherwise      = findVar vName (Right (VarScopes (decScope scope) scopeData))
-                    where types = fromJust $ getValue currScope scopeData
-                          varType = find (\(x, _) -> x == vName) types
+                    | otherwise = findVar vName (Right (VarScopes (decScope scope) scopeData))
+                    where types = getValue currScope scopeData
+                          varType = find (\(x, _) -> x == vName) (fromJust types)
 
 -- Adds variable to VarScopes
 addVar :: VarDef -> TypeChecker -> TypeChecker
@@ -111,7 +112,7 @@ elaborate script = check script initTypeChecker
 -- -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let x: Int = true * 5;"
+steasy = tryParse script "let x: Int = 5; let y: Int = z * 5;"
 
 initScope :: Scopes
 initScope = ((0,0), (0,0))
