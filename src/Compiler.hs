@@ -34,18 +34,19 @@ compileStmt ctx stmt = case stmt of
     VarDecl (name, _) (Just expr)  -> updateVar ctx name 0 expr
     VarAssign name expr            -> updateVar ctx name 0 expr
     ArrInsert name idx expr        -> updateVar ctx name idx expr
-    InScope script                 -> simpleScope ctx script
-    Action expr                    -> voidExpr ctx expr
+
+    InScope script  -> simpleScope ctx script
+    Action expr     -> voidExpr ctx expr
 
     WhileLoop expr script -> cond ++ body
         where
-            cond  = skipCond ctx expr body
-            body  = simpleScope ctx script ++ jumpBack [body, cond]
+            cond      = skipCond ctx expr body
+            body      = simpleScope ctx script ++ jumpBack [body, cond]
 
     Condition expr ifScript Nothing -> cond ++ ifBody
         where
-            cond    = skipCond ctx expr ifBody
-            ifBody  = simpleScope ctx ifScript
+            cond      = skipCond ctx expr ifBody
+            ifBody    = simpleScope ctx ifScript
 
     Condition expr ifScript (Just elseScript) 
         -> cond ++ ifBody ++ elseBody
@@ -65,13 +66,13 @@ elseScope ctx = putInScope ctx . compileScript (inScopeCtxElse ctx)
 -- compiles an expression, which result is stored in a variable
 updateVar :: Context -> VarName -> Integer -> Expr -> [Instruction]
 updateVar ctx name idx expr = case expr of
-    Fixed (Arr vals) -> putArrImm ctx name (intVal <$> vals) 
-    Fixed (Text text) -> putArrImm ctx name (toInteger <$> ord <$> text)
-    expr -> exprToReg ++ varToMem
+    Fixed (Arr vals)    -> putArrImm ctx name (intVal <$> vals) 
+    Fixed (Text text)   -> putArrImm ctx name (toInteger <$> ord <$> text)
+    expr                -> exprToReg ++ varToMem
     where 
-        (reg2, ctx2) = occupyReg ctx
-        exprToReg    = compileExpr ctx2 expr reg2
-        varToMem     = putVar ctx2 name reg2 idx
+        (reg2, ctx2)    = occupyReg ctx
+        exprToReg       = compileExpr ctx2 expr reg2
+        varToMem        = putVar ctx2 name reg2 idx
 
 -- compiles an expression, which result is ignored
 voidExpr :: Context -> Expr -> [Instruction]
