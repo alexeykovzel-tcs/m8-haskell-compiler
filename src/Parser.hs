@@ -37,10 +37,8 @@ data Statement
     | Action        Expr
     deriving Show
 
-data LoopIter
-    = IterRange     Expr Expr
-    | IterArr       [Value]
-    | IterVar       VarName
+data LoopIter 
+    = IterRange Expr Expr
     deriving Show
 
 script :: Parser Script
@@ -96,11 +94,6 @@ forLoop = ForLoop
 
 loopIter :: Parser LoopIter
 loopIter = IterRange <$> expr <* symbol ".." <*> expr
-
--- TODO: uncomment when implemented:
-
--- <|> IterArr   <$> array
--- <|> IterVar   <$> name
 
 whileLoop :: Parser Statement
 whileLoop = WhileLoop
@@ -312,10 +305,7 @@ instance QC.Arbitrary Value where
         pure None ]
 
 instance QC.Arbitrary LoopIter where
-    arbitrary = QC.oneof [
-        IterRange <$> QC.arbitrary <*> QC.arbitrary,
-        IterArr   <$> QC.listOf QC.arbitrary,
-        IterVar   <$> QC.arbitrary ]
+    arbitrary = QC.oneof [ IterRange <$> QC.arbitrary <*> QC.arbitrary ]
 
 autoScript :: IO Script
 autoScript = QC.generate (QC.resize 3 QC.arbitrary)

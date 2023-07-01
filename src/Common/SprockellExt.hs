@@ -37,7 +37,7 @@ data Context = Ctx {
 -- reserves a register for the data pointer (DP)
 regDP = regA
 
--- reserves registers for the free use
+-- reserves registers for the free usage
 userRegs = [regB, regC, regD, regE, regF]
 
 -- initializes the data pointer (DP)
@@ -77,7 +77,7 @@ branchOver reg body = [Branch reg $ Rel $ length body + 1]
 jumpOver :: [Instruction] -> [Instruction]
 jumpOver body = [Jump $ Rel $ length body + 1]
 
--- jumps back over the given intruction parts
+-- jumps back over the given sets of intructions
 jumpBack :: [[Instruction]] -> [Instruction]
 jumpBack parts = [Jump $ Rel $ -partsLen + 1]
     where partsLen = foldl (\a b -> a + length b) 0 parts
@@ -122,50 +122,47 @@ storeAI ctx reg1 reg2 offset =
 
 -- prints a string
 printStr :: Context -> String -> [Instruction]
-printStr ctx str = concat $ map (writeChar $ findReg ctx) str
+printStr ctx str = concat $ map (printChar $ findReg ctx) str
 
 -- prints a string with a new line
 printStrLn :: Context -> String -> [Instruction]
 printStrLn ctx str = printStr ctx (str ++ "\n")
 
 -- prints a single character
-writeChar :: RegAddr -> Char -> [Instruction]
-writeChar reg c = [Load (ImmValue $ ord c) reg, WriteInstr reg charIO]
+printChar :: RegAddr -> Char -> [Instruction]
+printChar reg c = [Load (ImmValue $ ord c) reg, WriteInstr reg charIO]
 
 -----------------------------------------------------------------------------
--- variable instructions
+-- variable management
 -----------------------------------------------------------------------------
 
--- loads variable data from memory to a register
+-- loads a variable from memory to a register
 loadVar :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
-loadVar ctx name reg idx = dpToReg ++ valToReg
-    where 
-        (depth, offset) = locateVar ctx name
-        (reg2, ctx2)    = occupyReg ctx
-        dpToReg         = loadDP ctx2 depth reg2
-        valToReg        = loadAI ctx2 reg2 (offset + idx) reg
+loadVar ctx name reg idx = applyVar ctx name 
+    $ \ctx regDP offset -> loadAI ctx regDP (offset + idx) reg
 
--- updates variable from a register
+-- updates a variable from a register
 putVar :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
-putVar ctx name reg idx = dpToReg ++ varToMem
-    where
-        (depth, offset) = locateVar ctx name
-        (reg2, ctx2)    = occupyReg ctx
-        dpToReg         = loadDP ctx2 depth reg2
-        varToMem        = storeAI ctx2 reg reg2 (offset + idx)
+putVar ctx name reg idx = applyVar ctx name
+    $ \ctx regDP offset -> storeAI ctx reg regDP (offset + idx)
 
+-- update an array with values
 putArrImm :: Context -> VarName -> [Integer] -> [Instruction]
-putArrImm ctx name vals = dpToReg ++ arrToMem
+putArrImm ctx name vals = applyVar ctx name
+    $ \ctx regDP offset -> let 
+
+        (reg2, ctx2) = occupyReg ctx
+        valToMem idx = loadImm (vals !! idx) reg2
+                     : storeAI ctx2 reg2 regDP (offset + toInteger idx)
+        
+        in foldl1 (++) $ map valToMem [0..length vals - 1]
+
+applyVar :: Context -> VarName -> (Context -> RegAddr -> Offset -> [Instruction]) -> [Instruction]
+applyVar ctx name apply = dpToReg ++ apply ctx2 reg2 offset
     where
         (depth, offset) = locateVar ctx name
         (reg2, ctx2)    = occupyReg ctx
-        (reg3, ctx3)    = occupyReg ctx2
         dpToReg         = loadDP ctx2 depth reg2
-        arrToMem        = foldl1 (++) $ map valToMem [0..length vals - 1]
-        valToMem idx    = loadImm (vals !! idx) reg3
-                        : storeAI ctx3 reg3 reg2 (offset + toInteger idx)
-
------------------------------------------------------------------------------
 
 -- loads a data pointer at the given scope depth
 loadDP :: Context -> Depth -> RegAddr -> [Instruction]
@@ -173,8 +170,7 @@ loadDP ctx depth reg =
     [loadImm dpOffset reg, Compute Add reg regDP reg]
     where 
         (scope, scopeDepth) = ctxScope ctx
-        depthDiff = scopeDepth - depth
-        dpOffset = - (scopeOffset ctx scope depthDiff)
+        dpOffset = - (scopeOffset ctx scope $ scopeDepth - depth)
 
 -- finds a variable position in memory
 locateVar :: Context -> VarName -> VarPos
@@ -191,24 +187,10 @@ locateVar (Ctx (scopeId, _) scopeMap _ _) name = varPos
 scopeOffset :: Context -> ScopeID -> Depth -> Offset
 scopeOffset _ _ 0 = 0
 scopeOffset ctx scope depthDiff = 
-    scopeOffset ctx prevScope (depthDiff - 1) + prevScopeSize
+    scopeOffset ctx prevScope (depthDiff - 1) + fromInteger scopeSize
     where 
-        prevScope     = getPrevScope ctx scope
-        prevScopeSize = fromInteger $ getScopeSize ctx prevScope
-
--- returns previous scope id by id
-getPrevScope :: Context -> ScopeID -> ScopeID
-getPrevScope ctx scope = prevScope
-    where (_, _, prevScope) = getScopeInfo ctx scope 
-
--- returns scope size by id
-getScopeSize :: Context -> ScopeID -> ScopeSize
-getScopeSize ctx scope = scopeSize
-    where (_, scopeSize, _) = getScopeInfo ctx scope 
-
--- returns scope info by id
-getScopeInfo :: Context -> ScopeID -> ScopeInfo
-getScopeInfo ctx scope = fromJust $ Map.lookup scope $ scopeMap ctx
+        (_, _, prevScope) = fromJust $ Map.lookup scope $ scopeMap ctx
+        (_, scopeSize, _) = fromJust $ Map.lookup prevScope $ scopeMap ctx
 
 -- puts instructions inside a scope
 putInScope :: Context -> [Instruction] -> [Instruction]
@@ -230,20 +212,16 @@ toScopeMap pathMap varMap  = scopeMap
         getInfo id varMap  = (varMap, scopeSize varMap, prevScope id)
         scopeSize varMap   = sumSeconds $ Map.elems varMap
         prevScope id       = fromMaybe (-1) (Map.lookup id pathMap)
-        scopeMap           = tryInsertMap 0 (emptyScopeInfo 0)
+        scopeMap           = tryInsertMap 0 (Map.empty, 0, 0)
                              $ Map.mapWithKey getInfo varMap
-
--- creates a dummy scope entry
-emptyScopeInfo :: ScopeID -> ScopeInfo
-emptyScopeInfo id = (Map.empty, 0, id)
 
 -- updates context for the next scope
 inScopeCtx :: Context -> Context
-inScopeCtx = updateScope (\(id, depth) -> (id + 1, depth + 1))
+inScopeCtx = applyScope (\(id, depth) -> (id + 1, depth + 1))
 
 -- updates context for the next "else" scope
 inScopeCtxElse :: Context -> Context
-inScopeCtxElse ctx = updateScope apply ctx
+inScopeCtxElse ctx = applyScope apply ctx
     where 
         (id, _) = ctxScope ctx
         nextId  = nextNum (id + 1) (childScopes id $ scopePath ctx)
@@ -257,8 +235,8 @@ childScopes p ((cx,px):xs)
     | otherwise = childScopes p xs
 
 -- updates the current scope
-updateScope :: (Scope -> Scope) -> Context -> Context
-updateScope apply (Ctx scope a b c) = Ctx (apply scope) a b c
+applyScope :: (Scope -> Scope) -> Context -> Context
+applyScope apply (Ctx scope a b c) = Ctx (apply scope) a b c
 
 -----------------------------------------------------------------------------
 -- utilities

@@ -9,6 +9,7 @@ import PreCompiler
 import PostParser
 import Parser
 import Debug.Trace
+import Data.Char (ord)
 import qualified Data.Map as Map
 
 -- compiles string into the SpriL language
@@ -63,8 +64,10 @@ elseScope ctx = putInScope ctx . compileScript (inScopeCtxElse ctx)
 
 -- compiles an expression, which result is stored in a variable
 updateVar :: Context -> VarName -> Integer -> Expr -> [Instruction]
-updateVar ctx name _ (Fixed (Arr vals)) = putArrImm ctx name (intVal <$> vals) 
-updateVar ctx name idx expr = exprToReg ++ varToMem
+updateVar ctx name idx expr = case expr of
+    Fixed (Arr vals) -> putArrImm ctx name (intVal <$> vals) 
+    Fixed (Text text) -> putArrImm ctx name (toInteger <$> ord <$> text)
+    expr -> exprToReg ++ varToMem
     where 
         (reg2, ctx2) = occupyReg ctx
         exprToReg    = compileExpr ctx2 expr reg2
@@ -123,10 +126,12 @@ compileExpr ctx expr reg = case expr of
         -> compileExpr ctx expr reg 
         ++ [WriteInstr reg numberIO]
 
+-- translates parsed values to integers
 intVal :: Parser.Value -> Integer
-intVal (Int val)    = val
-intVal (Bool val)   = intBool val
-intVal (None)       = -1
+intVal (Int val) = val
+intVal (Bool val) = intBool val
+intVal (None) = -1
+intVal val = error $ "failed translating value: " ++ show val
 
 -- compiles a skip condition from an expression
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 
