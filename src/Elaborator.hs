@@ -12,6 +12,14 @@ import qualified Data.Map as Map
 -- Type Checking
 -----------------------------------------------------------------------------
 
+{-
+TODO:
+- Add support for functions
+- Add multiple error message
+- Refactor the code
+- Add tests
+-}
+
 type CurrScope = (Int, Int)
 type PrevScope = (Int, Int)
 type Scopes = (CurrScope, PrevScope)
@@ -33,6 +41,9 @@ data Error
 
 -- Merges two type checkers into one
 -- merge :: TypeChecker -> TypeChecker -> TypeChecker
+
+getArrayType :: DataType -> DataType
+getArrayType (ArrType dataType _) = dataType
 
 -- Adds error to the list of errors
 addError :: Error -> TypeChecker -> TypeChecker
@@ -123,6 +134,14 @@ checkVarAssign varName expr typeChecker
                 where (_, dataType)                   = fromJust $ findVar varName typeChecker 
                       (exprDataType, exprTypeChecker) = checkAction expr typeChecker
 
+checkArrInsert :: VarName -> Integer -> Expr -> TypeChecker -> TypeChecker
+checkArrInsert varName index expr typeChecker
+                | isJust (findVar varName typeChecker) == False = error "MissingDecl ArrInsert"
+                | (getArrayType dataType /= exprDataType) = error "InvalidType ArrInsert"
+                | otherwise = exprTypeChecker
+                where (_, dataType) = fromJust $ findVar varName typeChecker
+                      (exprDataType, exprTypeChecker) = checkAction expr typeChecker
+
 checkForLoop :: VarDef -> LoopIter -> Script -> TypeChecker -> TypeChecker
 checkForLoop varType@(_, IntType) (IterRange left right) script typeChecker = scriptTypeChecker
                 where varDefTypeChecker = addVar varType $ incScope typeChecker
@@ -147,7 +166,7 @@ check :: Script -> TypeChecker -> TypeChecker
 check [] typeChecker = decScope typeChecker
 check ((VarDecl varType maybeExpr):xs) typeChecker = check xs $ checkVarDecl varType maybeExpr typeChecker
 check ((VarAssign varName expr):xs) typeChecker = check xs $ checkVarAssign varName expr typeChecker
-check ((ArrInsert varName size expr):xs) typeChecker = error "ArrayInsert"
+check ((ArrInsert varName index expr):xs) typeChecker = check xs $ checkArrInsert varName index expr typeChecker
 check ((ForLoop varType loopIter script):xs) typeChecker 
                 = check xs $ checkForLoop varType loopIter script typeChecker
 check ((WhileLoop expr script):xs) typeChecker = check xs $ checkWhileLoop expr script typeChecker
@@ -167,7 +186,7 @@ elaborate script = check script initTypeChecker
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let array: Int[5]; let x: Int = 0; array[0] = 5;"
+steasy = tryParse script "let array: Int[5]; let x: Int = 0; arr[3] = 5;"
 
 initScope :: Scopes
 initScope = ((0,0), (0,0))
