@@ -209,7 +209,7 @@ data DataType
     | BoolType
     | IntType
     | ArrType DataType ArrSize
-    deriving Show
+    deriving (Show, Eq)
 
 dataType :: Parser DataType
 dataType = foldl ArrType <$> baseType <*> arrDecl
