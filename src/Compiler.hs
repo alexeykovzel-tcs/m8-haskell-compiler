@@ -109,7 +109,7 @@ compileExpr ctx expr reg = case expr of
             ifBody    = compileExpr ctx expr2 reg ++ jumpOver elseBody
             elseBody  = compileExpr ctx expr3 reg
 
-    FunCall "thread_id" [Var name]
+    FunCall "set_thread_id" [Var name]
         -> putVar ctx name regSprID 0
 
     FunCall "thread_create" [Fixed (Int threadId)]
@@ -118,10 +118,10 @@ compileExpr ctx expr reg = case expr of
     FunCall "thread_join" [Fixed (Int threadId)]
         -> printStrLn ctx ("join thread: " ++ show threadId)
  
-    FunCall "print" [Fixed msg]
+    FunCall "print_str" [Fixed msg]
         -> printStrLn ctx (show msg)
 
-    FunCall "print" [Var name]
+    FunCall "print_str" [Var name]
         -> applyArr ctx name (\reg -> [WriteInstr reg charIO])
         ++ printChar reg '\n'
 
