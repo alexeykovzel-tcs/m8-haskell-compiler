@@ -6,6 +6,7 @@ import Data.Maybe
 import Data.Typeable
 import Data.List (find)
 import Data.Map (Map)
+import Control.Exception
 import qualified Data.Map as Map
 
 -----------------------------------------------------------------------------
@@ -14,30 +15,33 @@ import qualified Data.Map as Map
 
 {-
 TODO:
+- Fix scope back traverse (add path map)
+- Add support for in scopes
 - Add support for functions
 - Add multiple error message
-- Refactor the code
 - Add tests
+- Clean the code
+- Check that var has value
 -}
 
 type CurrScope = (Int, Int)
 type PrevScope = (Int, Int)
 type Scopes = (CurrScope, PrevScope)
 
--- type VarType = (VarName, DataType)
 type ScopeData = Map CurrScope [VarDef]
+data VarScopes = VarScopes Scopes ScopeData deriving Show
 
 type TypeChecker = Either [Error] VarScopes
-
-data VarScopes = VarScopes Scopes ScopeData deriving Show
 
 data Error 
     = InvalidType   SourcePos String    -- applying operation to an invalid type
     | DupDecl       SourcePos String    -- duplicate entity declaration
     | MissingDecl   SourcePos String    -- calling non-existent entity
-    | EmptyDecl     SourcePos String    -- variable decl. with no type and value
-    | NoReturn      SourcePos           -- function decl. without return
+    | NotAssigned   SourcePos String    -- using variable without value
+    | NoReturn      SourcePos String    -- function decl. without return
     deriving Show
+
+instance Exception Error
 
 -- Merges two type checkers into one
 -- merge :: TypeChecker -> TypeChecker -> TypeChecker
@@ -56,17 +60,26 @@ prepareScope (a,b) = (a,0)
 -- Traverses TypeChecker to find a variable in (wrapping) scopes
 findVar :: VarName -> TypeChecker -> Maybe VarDef
 findVar _ (Right (VarScopes ((-1, _), _) scopeData)) = Nothing
-findVar vName typeChecker@(Right (VarScopes (currScope, _) scopeData)) 
-                    | isJust types == False = findVar vName (decScope typeChecker)
-                    | isJust varType == False = findVar vName (decScope typeChecker)
-                    | otherwise = varType
-                    where types = getValue (prepareScope currScope) scopeData
-                          varType = find (\(x, _) -> x == vName) (fromJust types)
+findVar varName typeChecker@(Right (VarScopes (currScope, _) scopeData)) 
+                | isJust types == False = findVar varName (decScope typeChecker)
+                | isJust varType == False = findVar varName (decScope typeChecker)
+                | otherwise = varType
+                where types = getValue (prepareScope currScope) scopeData
+                      varType = find (\(x, _) -> x == varName) (fromJust types)
 
--- Adds variable to VarScopes
+isDeclared :: VarDef -> TypeChecker -> Bool
+isDeclared (varName, _) typeChecker@(Right (VarScopes (currScope, _) scopeData)) 
+                | isJust types == False = False
+                | isJust varType == False = False
+                | otherwise = True
+                where types = getValue (prepareScope currScope) scopeData
+                      varType = find (\(x, _) -> x == varName) (fromJust types)
+
+-- Adds variable to VarScopes if it wasn't declared before in the same scope
 addVar :: VarDef -> TypeChecker -> TypeChecker
-addVar varType (Right (VarScopes scopes scopeData)) 
-                    = Right $ VarScopes scopes (Map.insertWith (++) (fst scopes) [varType] scopeData)
+addVar varType typeChecker@(Right (VarScopes scopes scopeData))
+                | isDeclared varType typeChecker  = error "DupDecl AddVar"
+                | otherwise = Right $ VarScopes scopes (Map.insertWith (++) (fst scopes) [varType] scopeData)
 
 -- Determines the type of the variable
 getType :: Value -> DataType
@@ -122,7 +135,7 @@ checkBoolOp left right typeChecker =
 checkVarDecl :: VarDef -> Maybe Expr -> TypeChecker -> TypeChecker
 checkVarDecl (varName, dataType) Nothing typeChecker = addVar (varName, dataType) typeChecker
 checkVarDecl (varName, dataType) (Just expr) typeChecker
-                | (dataType /= exprDataType) = error "InvalidType VarDecl"
+                | (dataType /= exprDataType) = error "MissingDecl VarDecl"
                 | otherwise                  = addVar (varName, dataType) exprTypeChecker
                 where (exprDataType, exprTypeChecker) = checkAction expr typeChecker
 
@@ -186,7 +199,7 @@ elaborate script = check script initTypeChecker
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let array: Int[5]; let x: Int = 0; arr[3] = 5;"
+steasy = tryParse script "let x: Int = 5; if x < x { let x: Int; if x < x { let y: Int; } else { let z: Int; } } else { let y: Int; }"
 
 initScope :: Scopes
 initScope = ((0,0), (0,0))
@@ -200,13 +213,15 @@ incScope (Right (VarScopes ((a,b), (c,d)) scopeData))
                 | otherwise = (Right (VarScopes ((a+1,b), (a,b)) scopeData))
 
 decScope :: TypeChecker -> TypeChecker
+-- decScope (Right (VarScopes ((a,b), (c,d)) scopeData)) = (Right (VarScopes ((c,d), (a,b)) scopeData))
 decScope (Right (VarScopes ((a,b), (c,d)) scopeData)) = (Right (VarScopes ((a-1,b), (a,b)) scopeData))
 
 getValue :: CurrScope -> ScopeData -> Maybe [VarDef]
 getValue currScope scopeData = Map.lookup currScope scopeData
 
-printElaborator :: TypeChecker -> TypeChecker
-printElaborator (Right varScopes@(VarScopes scopes scopeData)) = error $ show varScopes
+printTypeChecker :: TypeChecker -> TypeChecker
+printTypeChecker (Left errors) = error $ show errors
+printTypeChecker (Right varScopes@(VarScopes scopes scopeData)) = error $ show varScopes
 
 debug :: TypeChecker
-debug = printElaborator $ elaborate steasy
+debug = printTypeChecker $ elaborate steasy
