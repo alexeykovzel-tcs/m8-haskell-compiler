@@ -1,7 +1,7 @@
 let turn: Int;
 let flag: Bool[2] = [false, false];
 
-func P0 {
+fun P0 {
     while true {
         flag[0] = true;
         turn = 1;
@@ -14,7 +14,7 @@ func P0 {
     }
 }
 
-func P1 {
+fun P1 {
     while true {
         flag[1] = true;
         turn = 0;
