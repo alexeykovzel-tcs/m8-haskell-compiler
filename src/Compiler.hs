@@ -3,8 +3,7 @@
 module Compiler (compile) where
 
 import Sprockell
-import Common.SprockellExt
-import Common.Table (tableToMap)
+import SprockellExt
 import PreCompiler
 import PostParser
 import Parser
@@ -14,7 +13,7 @@ import qualified Data.Map as Map
 
 -- compiles string into the SpriL language
 compile :: String -> [Instruction]
-compile code = initDP ++ progASM ++ [EndProg]
+compile code = initArp ++ progASM ++ [EndProg]
     where
         prog     = postParse $ tryParse script code
         progASM  = compileScript (initCtx prog) prog
@@ -138,7 +137,7 @@ intVal val = error $ "failed translating value: " ++ show val
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 
 skipCond ctx expr body = let (reg2, ctx2) = occupyReg ctx in
        compileExpr ctx2 expr reg2
-    ++ notBool ctx2 reg2
+    ++ [Compute Equal reg2 reg0 reg2]
     ++ branchOver reg2 body
 
 -- compiles a binary operation

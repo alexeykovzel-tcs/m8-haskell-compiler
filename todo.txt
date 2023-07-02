@@ -1,0 +1,4 @@
+1. Update nested scoping for functions
+2. Implement functions
+3. Implement chars
+4. Implement strings

@@ -4,6 +4,9 @@ import Sprockell
 import Compiler
 import Control.Monad (join)
 
+runDemo :: FilePath -> IO() 
+runDemo file = runFiles 1 ("demo/" ++ file ++ ".txt") 
+
 runFiles :: Int -> FilePath -> IO()
 runFiles n file = join $ runProgs n <$> readFile file
 

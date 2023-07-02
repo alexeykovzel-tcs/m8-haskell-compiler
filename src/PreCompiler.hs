@@ -4,28 +4,29 @@ module PreCompiler (initCtx) where
 
 import Parser
 import PostParser
-import Common.Table
-import Common.SprockellExt
+import Data.Maybe
+import SprockellExt
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad (join)
 
-type ScopeCtx  = (VarTable, ScopePath)
-
 -- builds the initial context for compilation
 initCtx :: Script -> Context
-initCtx prog = Ctx mainScope scopeMap scopePath userRegs
-    where
-        scopePath  = walkScopes prog
-        varTable   = allocVars prog scopePath
-        scopeMap   = toScopeMap (Map.fromList scopePath) (tableToMap varTable)
-        mainScope  = (0, 1)
+initCtx prog = Ctx 0 (allocVars prog) (walkScopes prog) userRegs
 
--- prints a table with variable positions after parsing a file
-printVarTable :: FilePath -> IO()
-printVarTable file = join $ printTable <$> (allocVars <$> prog <*> scopePath)
-    where 
-        prog = postParse <$> (tryParse script <$> readFile file) 
-        scopePath = walkScopes <$> prog
+-- :::: FOR TESTING ::::
+
+printScopeMap :: FilePath -> IO()
+printScopeMap file = join $ printTable <$> (Map.toList <$> (allocVars <$> prog))
+    where prog = tryParse script <$> readFile file
+
+printTable [] = pure ()
+printTable ((k,(v, d, s)):xs) = do
+    putStrLn $ show (k, d, s) ++ " " ++ printRow (Map.toList v)
+    printTable xs
+
+printRow (x:xs) = show x ++ " " ++ printRow xs
+printRow [] = ""
 
 -----------------------------------------------------------------------------
 -- scope hierarchy
@@ -60,20 +61,21 @@ instance ScopeWalker Statement where
 -- variable positions in memory
 -----------------------------------------------------------------------------
 
-type VarTable    = Table ScopeID VarName (VarPos, VarSize)
-type VarCtx      = (ScopeID, VarPos, VarTable)
+type VarCtx    = (ScopeID, ScopeID, VarPos, ScopeMap)
 
 -- builds a table with variable positions in memory
-allocVars :: Script -> ScopePath -> VarTable
-allocVars script scopePath = inheritVars varTable scopePath
-    where (_, _, varTable) = scriptVars (0, (1, 0), []) script
+allocVars :: Script -> ScopeMap
+allocVars script = scopeMap
+    where 
+        initScopeMap        = Map.fromList [(0, (Map.empty, 1, 0))]
+        (_, _, _, scopeMap) = finishScope $ scriptVars (-1, 0, (1, 0), initScopeMap) script
 
 -- allocates variables for a given script
 scriptVars :: VarCtx -> Script -> VarCtx
 scriptVars ctx []     = ctx
 scriptVars ctx (x:xs) = scriptVars nextCtx xs
     where 
-        ctx2 = nextScope ctx
+        ctx2 = incrScope $ incrDepth $ finishScope ctx
         nextCtx = case x of
             VarDecl var _      -> allocVar ctx var
             InScope body       -> scriptVars ctx2 body 
@@ -81,37 +83,50 @@ scriptVars ctx (x:xs) = scriptVars nextCtx xs
             Condition _ a b    -> peerVars ctx2 $ a : maybe [] pure b
             _                  -> ctx
 
--- increases depth and scope id
-nextScope :: VarCtx -> VarCtx
-nextScope (scope, (depth, _), table) = 
-    (scope + 1, (depth + 1, 0), table)
-
 -- allocates variables for scripts on the same depth
 peerVars :: VarCtx -> [Script] -> VarCtx
-peerVars ctx [] = ctx
 peerVars ctx [x] = scriptVars ctx x
-peerVars ctx@(_, pos, _) (x:xs) = 
-    let (scope, _, table) = scriptVars ctx x
-    in peerVars (scope + 1, pos, table) xs
+peerVars ctx@(_, _, pos, _) (x:xs) =
+    let (parent, scope, _, scopeMap) = incrScope $ finishScope $ scriptVars ctx x
+    in  peerVars (parent, scope, pos, scopeMap) xs
 
 -- allocates a variable in the current scope
 allocVar :: VarCtx -> VarDef -> VarCtx
-allocVar (scope, pos@(depth, offset), table) (name, dataType) =
-    (scope, (depth, offset + varSize), newTable)
+allocVar (parent, scope, pos@(depth, offset), scopeMap) (name, dataType) =
+         (parent, scope, (depth, offset + varSize), newScopeMap)
     where 
-        newTable = insertCell scope name (pos, varSize) table
-        varSize = measureVar dataType
+        (varMap, depth, scopeSize) = fromJust $ Map.lookup scope scopeMap
+        varSize      = measureVar dataType
+        newVarMap    = Map.insert name (pos, varSize) varMap
+        newScopeMap  = Map.insert scope (newVarMap, depth, scopeSize + varSize) scopeMap
 
+-- adds a new scope
+incrScope :: VarCtx -> VarCtx
+incrScope (parent, scope, pos@(depth, _), scopeMap) = newCtx
+    where 
+        newScopeMap = Map.insert (scope + 1) (Map.empty, depth, 0) scopeMap
+        newCtx = (parent, scope + 1, pos, newScopeMap)
+
+finishScope :: VarCtx -> VarCtx
+finishScope ctx = inheritVars $ allocVar ctx ("_arp", IntType)
+
+-- inherits missing variables from the previous scope
+inheritVars :: VarCtx -> VarCtx
+inheritVars ctx@(_, _, (1, _), _) = ctx
+inheritVars (parent, scope, pos@(depth, _), scopeMap) = 
+            (parent, scope, pos, newScopeMap)
+    where
+        (parentVarMap, _, _)    = fromJust $ Map.lookup parent scopeMap
+        (varMap, depth, size)   = fromJust $ Map.lookup scope scopeMap
+        newVarMap               = Map.union varMap parentVarMap
+        newScopeMap             = Map.insert scope (newVarMap, depth, size) scopeMap
+
+-- increases scope depth
+incrDepth :: VarCtx -> VarCtx
+incrDepth (_, scope, (depth, _), scopeMap) =
+    (scope, scope, (depth + 1, 0), scopeMap)
+
+-- measures the variable size based on its type
 measureVar :: DataType -> VarSize
 measureVar (ArrType _ size) = size
-measureVar _ = 1
-
--- inherits missing variables from the previous scopes
-inheritVars :: VarTable -> ScopePath -> VarTable
-inheritVars table [] = table
-inheritVars table ((scope, prevScope):xs) = inheritVars newTable xs
-    where 
-        vars      = findRow scope table
-        prevVars  = findRow prevScope table
-        newVars   = filterCells prevVars vars
-        newTable  = updateRow scope newVars table
+measureVar _                = 1
