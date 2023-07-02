@@ -149,13 +149,23 @@ putArrImm ctx name vals = applyVar ctx name
         
         in foldl1 (++) $ map valToMem [0..length vals - 1]
 
+-- applies a function to each element of the array
+applyArr :: Context -> VarName -> (RegAddr -> [Instruction]) -> [Instruction]
+applyArr ctx name applyIdx = applyVar ctx name
+    $ \ctx regArp offset -> foldl1 (++) $ apply <$> [offset..offset + size - 1]
+    where 
+        (_, size)     = getVar ctx name
+        (reg2, ctx2)  = occupyReg ctx
+        apply offset  = loadAI ctx2 regArp offset reg2 ++ applyIdx reg2
+
+-- loads a variable ARP and applies a function to it
 applyVar :: Context -> VarName -> (Context -> RegAddr -> Offset -> [Instruction]) -> [Instruction]
 applyVar ctx name apply = arpToReg ++ apply ctx2 reg2 offset
     where
-        (depth, offset)     = locateVar ctx name
-        (reg2, ctx2)        = occupyReg ctx
-        (_, scopeDepth, _)  = getScope ctx
-        arpToReg            = loadArp ctx2 (scopeDepth - depth) reg2
+        ((depth, offset), _) = getVar ctx name
+        (reg2, ctx2)         = occupyReg ctx
+        (_, scopeDepth, _)   = getScope ctx
+        arpToReg             = loadArp ctx2 (scopeDepth - depth) reg2
 
 -- loads a data pointer at the given scope depth
 loadArp :: Context -> Depth -> RegAddr -> [Instruction]
@@ -163,13 +173,12 @@ loadArp ctx 0 reg = [copyReg regArp reg]
 loadArp ctx 1 reg = loadAI ctx regArp (-1) reg
 loadArp ctx n reg = loadArp ctx (n - 1) reg ++ loadAI ctx reg (-1) reg
 
--- finds a variable position in memory
-locateVar :: Context -> VarName -> VarPos
-locateVar ctx name = varPos
-    where 
-        (varMap, _, _) = getScope ctx
-        (varPos, _)    = fromJust $ Map.lookup name varMap
+-- gets variable information by name
+getVar :: Context -> VarName -> (VarPos, VarSize)
+getVar ctx name = fromJust $ Map.lookup name varMap
+    where (varMap, _, _) = getScope ctx
 
+-- gets current scope information
 getScope :: Context -> (VarMap, Depth, ScopeSize)
 getScope ctx = fromJust $ Map.lookup (ctxScopeId ctx) (scopeMap ctx)
 

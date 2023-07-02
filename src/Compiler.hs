@@ -66,7 +66,6 @@ elseScope ctx = putInScope ctx . compileScript (inScopeCtxElse ctx)
 updateVar :: Context -> VarName -> Integer -> Expr -> [Instruction]
 updateVar ctx name idx expr = case expr of
     Fixed (Arr vals)    -> putArrImm ctx name (intVal <$> vals) 
-    Fixed (Text text)   -> putArrImm ctx name (toInteger <$> ord <$> text)
     expr                -> exprToReg ++ varToMem
     where 
         (reg2, ctx2)    = occupyReg ctx
@@ -119,18 +118,23 @@ compileExpr ctx expr reg = case expr of
     FunCall "thread_join" [Fixed (Int threadId)]
         -> printStrLn ctx ("join thread: " ++ show threadId)
  
-    FunCall "print" [Fixed (Text msg)]
-        -> printStrLn ctx msg
+    FunCall "print" [Fixed msg]
+        -> printStrLn ctx (show msg)
+
+    FunCall "print" [Var name]
+        -> applyArr ctx name (\reg -> [WriteInstr reg charIO])
+        ++ printChar reg '\n'
 
     FunCall "print" [expr]
         -> compileExpr ctx expr reg 
-        ++ [WriteInstr reg numberIO]
+        ++ [WriteInstr reg numberIO] 
 
 -- translates parsed values to integers
 intVal :: Parser.Value -> Integer
-intVal (Int val) = val
-intVal (Bool val) = intBool val
-intVal (None) = -1
+intVal (Int val)    = val
+intVal (Bool val)   = intBool val
+intVal (Char val)   = toInteger $ ord val
+intVal (None)       = -1
 intVal val = error $ "failed translating value: " ++ show val
 
 -- compiles a skip condition from an expression
