@@ -1,3 +1,29 @@
-let a: Int; 
-thread_id(a); 
-print(a);
+let turn: Int;
+let flag: Bool[2] = [false, false];
+
+func P0 {
+    while true {
+        flag[0] = true;
+        turn = 1;
+        while flag[1] && turn == 1 {};
+        // Critical Section for P0
+        print("P0 is in the critical section");
+        flag[0] = false;
+        // completed
+        print("P0 is done");
+    }
+}
+
+func P1 {
+    while true {
+        flag[1] = true;
+        turn = 0;
+        while flag[0] && turn == 0 {};
+        // Critical Section for P1
+        print("P1 is in the critical section");
+        flag[1] = false;
+        // completed
+        print("P1 is done");
+    }
+}
+
