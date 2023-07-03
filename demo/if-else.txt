@@ -1,0 +1,9 @@
+let x: Int = 2;
+
+if x == 3 {
+    let x: Int = -1;
+    print(x);
+} else {
+    let x: Int = -2;
+    print(x);
+}
