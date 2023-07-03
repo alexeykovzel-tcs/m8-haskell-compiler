@@ -15,8 +15,7 @@ import qualified Data.Map as Map
 
 {-
 TODO:
-- Fix scope back traverse (add path map)
-- Add support for in scopeMap
+- Add support for in scope
 - Add support for functions
 - Add multiple error message
 - Add tests
@@ -165,7 +164,7 @@ checkWhileLoop expr script typeChecker
 checkCondition :: Expr -> Script -> Maybe Script -> TypeChecker -> TypeChecker
 checkCondition expr ifScript elseScript typeChecker =
                 case (elseScript) of
-                    Nothing -> check ifScript (incScope ifTypeChecker)
+                    Nothing -> check ifScript $ incScope ifTypeChecker
                     Just script -> check script $ incScope $ check ifScript (incScope ifTypeChecker)
                 where (_, ifTypeChecker) = checkAction expr typeChecker
 
@@ -195,22 +194,23 @@ elaborate script = check script initTypeChecker
 
 steasy :: Script
 steasy = tryParse script "let x: Int = 5; let y: Int = 0; \
-                         \if x < y { let x: Int; while x < 3 { let z: Bool; } } else { let y: Int; } \
+                         \if x < y { let x: Bool; } \ 
+                        \ if x < y { x = 10; } \
                          \let z: Bool = true;"
 
 initTypeChecker :: TypeChecker
 initTypeChecker = Right $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty
 
--- FIX -> WRONG INCREMENT VALUE
 incScope :: TypeChecker -> TypeChecker
-incScope (Right (Context ((old@(a,b), (c,d)), scopePath) scopeVars))
-                | (a+1) == c = (Right (Context ((new, old), Map.insert new old scopePath) scopeVars))
-                | otherwise = (Right (Context ((newAlt, old), Map.insert newAlt old scopePath) scopeVars))
-                where new = (a+1, d+1)
-                      newAlt = (a+1,b)
+incScope (Right (Context ((old@(a,b), (c,d)), scopePath) scopeVars)) =
+                case (Map.lookup (a+1,b) scopePath) of
+                    Nothing -> (Right (Context ((new, old), Map.insert new old scopePath) scopeVars))
+                    Just _ -> (Right (Context ((newAlt, old), Map.insert newAlt old scopePath) scopeVars))
+                    where new = (a+1,b)
+                          newAlt = (a+1,d+1)
 
 decScope :: TypeChecker -> TypeChecker
-decScope typeChecker@(Right (Context (((0,0), previous), scopePath) scopeVars)) = typeChecker
+decScope typeChecker@(Right (Context (((0,0), (-1,0)), scopePath) scopeVars)) = typeChecker
 decScope (Right (Context ((_, previous), scopePath) scopeVars))
                 = (Right (Context ((previous, fetched), scopePath) scopeVars))
                 where fetched = fromJust $ Map.lookup previous scopePath
