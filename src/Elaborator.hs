@@ -16,7 +16,7 @@ import qualified Data.Map as Map
 {-
 TODO:
 - Fix scope back traverse (add path map)
-- Add support for in scopes
+- Add support for in scopeMap
 - Add support for functions
 - Add multiple error message
 - Add tests
@@ -24,14 +24,16 @@ TODO:
 - Check that var has value
 -}
 
-type CurrScope = (Int, Int)
-type PrevScope = (Int, Int)
-type Scopes = (CurrScope, PrevScope)
+type Current = (Int, Int)
+type Previous = (Int, Int)
+type Scope = (Current, Previous)
 
-type ScopeData = Map CurrScope [VarDef]
-data VarScopes = VarScopes Scopes ScopeData deriving Show
+type ScopePath = Map Current Previous
+type ScopeMap = (Scope, ScopePath)
+type ScopeVars = Map Current [VarDef]
 
-type TypeChecker = Either [Error] VarScopes
+data Context = Context ScopeMap ScopeVars deriving Show
+type TypeChecker = Either [Error] Context
 
 data Error 
     = InvalidType   SourcePos String    -- applying operation to an invalid type
@@ -41,11 +43,6 @@ data Error
     | NoReturn      SourcePos String    -- function decl. without return
     deriving Show
 
-instance Exception Error
-
--- Merges two type checkers into one
--- merge :: TypeChecker -> TypeChecker -> TypeChecker
-
 getArrayType :: DataType -> DataType
 getArrayType (ArrType dataType _) = dataType
 
@@ -53,33 +50,30 @@ getArrayType (ArrType dataType _) = dataType
 addError :: Error -> TypeChecker -> TypeChecker
 addError error (Left errors) = Left $ error : errors
 
--- Prepares a scope to be used in search
-prepareScope :: CurrScope -> CurrScope
-prepareScope (a,b) = (a,0)
-
--- Traverses TypeChecker to find a variable in (wrapping) scopes
+-- Traverses TypeChecker to find a variable in (wrapping) scopeMap
 findVar :: VarName -> TypeChecker -> Maybe VarDef
-findVar _ (Right (VarScopes ((-1, _), _) scopeData)) = Nothing
-findVar varName typeChecker@(Right (VarScopes (currScope, _) scopeData)) 
+findVar _ (Right (Context (((-1,0), _), _) scopeVars)) = Nothing
+findVar varName typeChecker@(Right (Context ((current, _), _) scopeVars)) 
                 | isJust types == False = findVar varName (decScope typeChecker)
                 | isJust varType == False = findVar varName (decScope typeChecker)
                 | otherwise = varType
-                where types = getValue (prepareScope currScope) scopeData
+                where types = getValue current scopeVars
                       varType = find (\(x, _) -> x == varName) (fromJust types)
 
 isDeclared :: VarDef -> TypeChecker -> Bool
-isDeclared (varName, _) typeChecker@(Right (VarScopes (currScope, _) scopeData)) 
+isDeclared (varName, _) typeChecker@(Right (Context ((current, _), _) scopeVars)) 
                 | isJust types == False = False
                 | isJust varType == False = False
                 | otherwise = True
-                where types = getValue (prepareScope currScope) scopeData
+                where types = getValue current scopeVars
                       varType = find (\(x, _) -> x == varName) (fromJust types)
 
--- Adds variable to VarScopes if it wasn't declared before in the same scope
+-- Adds variable to Context if it wasn't declared before in the same scope
 addVar :: VarDef -> TypeChecker -> TypeChecker
-addVar varType typeChecker@(Right (VarScopes scopes scopeData))
-                | isDeclared varType typeChecker  = error "DupDecl AddVar"
-                | otherwise = Right $ VarScopes scopes (Map.insertWith (++) (fst scopes) [varType] scopeData)
+addVar varDef typeChecker@(Right (Context scopeMap scopeVars)) =
+                case (isDeclared varDef typeChecker) of
+                    True    -> error $ "DupDecl AddVar " ++ show varDef
+                    False   -> Right $ Context scopeMap $ Map.insertWith (++) (fst (fst scopeMap)) [varDef] scopeVars
 
 -- Determines the type of the variable
 getType :: Value -> DataType
@@ -199,29 +193,33 @@ elaborate script = check script initTypeChecker
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let x: Int = 5; if x < x { let x: Int; if x < x { let y: Int; } else { let z: Int; } } else { let y: Int; }"
-
-initScope :: Scopes
-initScope = ((0,0), (0,0))
+steasy = tryParse script "let x: Int = 5; let y: Int = 0; \
+                         \if x < y { let x: Int; while x < 3 { let z: Bool; } } else { let y: Int; } \
+                         \let z: Bool = true;"
 
 initTypeChecker :: TypeChecker
-initTypeChecker = Right $ VarScopes initScope Map.empty
+initTypeChecker = Right $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty
 
+-- FIX -> WRONG INCREMENT VALUE
 incScope :: TypeChecker -> TypeChecker
-incScope (Right (VarScopes ((a,b), (c,d)) scopeData))
-                | (a+1) == c = (Right (VarScopes ((a+1,d+1), (a,b)) scopeData))
-                | otherwise = (Right (VarScopes ((a+1,b), (a,b)) scopeData))
+incScope (Right (Context ((old@(a,b), (c,d)), scopePath) scopeVars))
+                | (a+1) == c = (Right (Context ((new, old), Map.insert new old scopePath) scopeVars))
+                | otherwise = (Right (Context ((newAlt, old), Map.insert newAlt old scopePath) scopeVars))
+                where new = (a+1, d+1)
+                      newAlt = (a+1,b)
 
 decScope :: TypeChecker -> TypeChecker
--- decScope (Right (VarScopes ((a,b), (c,d)) scopeData)) = (Right (VarScopes ((c,d), (a,b)) scopeData))
-decScope (Right (VarScopes ((a,b), (c,d)) scopeData)) = (Right (VarScopes ((a-1,b), (a,b)) scopeData))
+decScope typeChecker@(Right (Context (((0,0), previous), scopePath) scopeVars)) = typeChecker
+decScope (Right (Context ((_, previous), scopePath) scopeVars))
+                = (Right (Context ((previous, fetched), scopePath) scopeVars))
+                where fetched = fromJust $ Map.lookup previous scopePath
 
-getValue :: CurrScope -> ScopeData -> Maybe [VarDef]
-getValue currScope scopeData = Map.lookup currScope scopeData
+getValue :: Current -> ScopeVars -> Maybe [VarDef]
+getValue current scopeVars = Map.lookup current scopeVars
 
 printTypeChecker :: TypeChecker -> TypeChecker
 printTypeChecker (Left errors) = error $ show errors
-printTypeChecker (Right varScopes@(VarScopes scopes scopeData)) = error $ show varScopes
+printTypeChecker (Right varScopes@(Context scopeMap scopeVars)) = error $ show varScopes
 
 debug :: TypeChecker
 debug = printTypeChecker $ elaborate steasy
