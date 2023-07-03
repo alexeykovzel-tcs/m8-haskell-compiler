@@ -1,0 +1,9 @@
+let a: Char[11] = "Hello World";
+
+a[6] = 'G';
+a[7] = 'l';
+a[8] = 'o';
+a[9] = 'b';
+a[10] = 'e';
+
+print_str(a);

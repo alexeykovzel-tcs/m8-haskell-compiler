@@ -2,6 +2,7 @@ module Parser where
 
 import Test.QuickCheck as QC
 import Text.ParserCombinators.Parsec
+import Data.List (intercalate)
 import Lexer
 
 -----------------------------------------------------------------------------
@@ -205,7 +206,8 @@ funCall = FunCall
 type ArrSize = Integer
 
 data DataType
-    = StrType
+    = CharType
+    | StrType
     | BoolType
     | IntType
     | ArrType DataType ArrSize
@@ -216,34 +218,60 @@ dataType = foldl ArrType <$> baseType <*> arrDecl
     where arrDecl = many $ brackets $ integer 
 
 baseType :: Parser DataType
-baseType = StrType    <$  reserved "String"
-       <|> BoolType   <$  reserved "Bool"
-       <|> IntType    <$  reserved "Int"
+baseType = CharType   <$ reserved "Char"
+       <|> BoolType   <$ reserved "Bool"
+       <|> IntType    <$ reserved "Int"
 
 -----------------------------------------------------------------------------
 -- value parsers
 -----------------------------------------------------------------------------
 
 data Value
-    = Text   String 
-    | Bool   Bool 
-    | Int    Integer
-    | Arr    [Value]
+    = Bool      Bool 
+    | Char      Char
+    | Int       Integer
+    | Arr       [Value]
     | None
-    deriving (Show, Eq)
+    deriving (Eq)
+
+instance Show Value where
+    show None           = "none"
+    show (Bool False)   = "false"
+    show (Bool True)    = "true"
+    show (Char val)     = show val
+    show (Int val)      = show val
+    show (Arr vals)     = arrToStr vals
+
+arrToStr :: [Value] -> String
+arrToStr vals = if isText vals 
+    then arrToText vals 
+    else "[" ++ (intercalate ", " $ show <$> vals) ++ "]"
+
+arrToText :: [Value] -> String
+arrToText [] = []
+arrToText ((Char c):xs) = c : arrToText xs
+
+isText :: [Value] -> Bool
+isText [] = True
+isText ((Char c):xs) = isText xs
+isText _ = False
 
 value :: Parser Value
-value = Int  <$> integer
-    <|> Text <$> text
-    <|> Arr  <$> array
-    <|> Bool <$> boolean
-    <|> None <$  reserved "None"
+value = Int   <$> integer
+    <|> Char  <$> character
+    <|> Arr   <$> text
+    <|> Arr   <$> array
+    <|> Bool  <$> boolean
+    <|> None  <$  reserved "none"
 
-text :: Parser String
-text = between (char '"') (char '"') (many textChar)
+text :: Parser [Value]
+text = between (char '"') (char '"') (many (Char <$> textChar))
     where 
         textChar = escapeChar <|> noneOf "\"\\"
         escapeChar = char '\\' *> oneOf "\"\\"
+
+character :: Parser Char
+character = between (char '\'') (char '\'') anyChar
 
 array :: Parser [Value]
 array = brackets $ value `sepBy` comma
@@ -298,7 +326,7 @@ instance QC.Arbitrary DataType where
 
 instance QC.Arbitrary Value where
     arbitrary = QC.oneof [
-        Text <$> QC.arbitrary,
+        Char <$> QC.arbitrary,
         Bool <$> QC.arbitrary,
         Int  <$> QC.arbitrary,
         Arr  <$> QC.arbitrary,

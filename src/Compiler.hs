@@ -3,8 +3,7 @@
 module Compiler (compile) where
 
 import Sprockell
-import Common.SprockellExt
-import Common.Table (tableToMap)
+import SprockellExt
 import PreCompiler
 import PostParser
 import Parser
@@ -14,7 +13,7 @@ import qualified Data.Map as Map
 
 -- compiles string into the SpriL language
 compile :: String -> [Instruction]
-compile code = initDP ++ progASM ++ [EndProg]
+compile code = initArp ++ progASM ++ [EndProg]
     where
         prog     = postParse $ tryParse script code
         progASM  = compileScript (initCtx prog) prog
@@ -67,7 +66,6 @@ elseScope ctx = putInScope ctx . compileScript (inScopeCtxElse ctx)
 updateVar :: Context -> VarName -> Integer -> Expr -> [Instruction]
 updateVar ctx name idx expr = case expr of
     Fixed (Arr vals)    -> putArrImm ctx name (intVal <$> vals) 
-    Fixed (Text text)   -> putArrImm ctx name (toInteger <$> ord <$> text)
     expr                -> exprToReg ++ varToMem
     where 
         (reg2, ctx2)    = occupyReg ctx
@@ -111,7 +109,7 @@ compileExpr ctx expr reg = case expr of
             ifBody    = compileExpr ctx expr2 reg ++ jumpOver elseBody
             elseBody  = compileExpr ctx expr3 reg
 
-    FunCall "thread_id" [Var name]
+    FunCall "set_thread_id" [Var name]
         -> putVar ctx name regSprID 0
 
     FunCall "thread_create" [Fixed (Int threadId)]
@@ -120,25 +118,30 @@ compileExpr ctx expr reg = case expr of
     FunCall "thread_join" [Fixed (Int threadId)]
         -> printStrLn ctx ("join thread: " ++ show threadId)
  
-    FunCall "print" [Fixed (Text msg)]
-        -> printStrLn ctx msg
+    FunCall "print_str" [Fixed msg]
+        -> printStrLn ctx (show msg)
+
+    FunCall "print_str" [Var name]
+        -> applyArr ctx name (\reg -> [WriteInstr reg charIO])
+        ++ printChar reg '\n'
 
     FunCall "print" [expr]
         -> compileExpr ctx expr reg 
-        ++ [WriteInstr reg numberIO]
+        ++ [WriteInstr reg numberIO] 
 
 -- translates parsed values to integers
 intVal :: Parser.Value -> Integer
-intVal (Int val) = val
-intVal (Bool val) = intBool val
-intVal (None) = -1
+intVal (Int val)    = val
+intVal (Bool val)   = intBool val
+intVal (Char val)   = toInteger $ ord val
+intVal (None)       = -1
 intVal val = error $ "failed translating value: " ++ show val
 
 -- compiles a skip condition from an expression
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 
 skipCond ctx expr body = let (reg2, ctx2) = occupyReg ctx in
        compileExpr ctx2 expr reg2
-    ++ notBool ctx2 reg2
+    ++ [Compute Equal reg2 reg0 reg2]
     ++ branchOver reg2 body
 
 -- compiles a binary operation
