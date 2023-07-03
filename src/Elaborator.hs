@@ -15,7 +15,6 @@ import qualified Data.Map as Map
 
 {-
 TODO:
-- Add support for in scope
 - Add support for functions
 - Add multiple error message
 - Add tests
@@ -179,6 +178,7 @@ check ((ForLoop varType loopIter script):xs) typeChecker
 check ((WhileLoop expr script):xs) typeChecker = check xs $ checkWhileLoop expr script typeChecker
 check ((Condition expr script maybeScript):xs) typeChecker 
                 = check xs $ checkCondition expr script maybeScript typeChecker
+check ((InScope script):xs) typeChecker = check xs $ check script $ incScope typeChecker
 check ((Action expr):xs) typeChecker = check xs $ snd $ checkAction expr typeChecker
 
 -- Generates error message with multiple errors found
@@ -194,9 +194,7 @@ elaborate script = check script initTypeChecker
 
 steasy :: Script
 steasy = tryParse script "let x: Int = 5; let y: Int = 0; \
-                         \if x < y { let x: Bool; } \ 
-                        \ if x < y { x = 10; } \
-                         \let z: Bool = true;"
+                         \{ let x: Int = 5; }"
 
 initTypeChecker :: TypeChecker
 initTypeChecker = Right $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty
