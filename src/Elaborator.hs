@@ -77,9 +77,10 @@ addVar varDef typeChecker@(Right (Context scopeMap scopeVars)) =
 
 -- Determines the type of the variable
 getType :: Value -> DataType
-getType (Text _) = StrType
 getType (Bool _) = BoolType
+getType (Char _) = CharType
 getType (Int _) = IntType
+getType (Arr [Char _]) = StrType
 
 -- Traverses the expression inside a statement
 checkAction :: Expr -> TypeChecker -> (DataType, TypeChecker)
