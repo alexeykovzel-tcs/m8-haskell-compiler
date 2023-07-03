@@ -6,9 +6,10 @@ import Data.Maybe
 import Data.Char (ord)
 import Data.List (sort)
 import Data.Map (Map)
-import Parser (VarName)
+import Parser (VarName, FunName)
 import qualified Data.Map as Map 
 
+type Size       = Integer
 type Offset     = Integer
 type Depth      = Integer
 
@@ -17,12 +18,14 @@ type VarPos     = (Depth, Offset)
 type VarMap     = Map VarName (VarPos, VarSize)
 
 type ScopeID    = Integer
-type ScopeSize  = Integer
-type ScopePath  = [(ScopeID, ScopeID)]
-type ScopeMap   = Map ScopeID (VarMap, Depth, ScopeSize)
+type ScopePath  = Map ScopeID ScopeID
+type ScopeMap   = Map ScopeID (VarMap, Depth, Size)
+
+type FunMap     = Map FunName (ScopeID, CodeAddr)
 
 data Context = Ctx {
     ctxScopeId :: ScopeID,
+    funMap     :: FunMap,
     scopeMap   :: ScopeMap,
     scopePath  :: ScopePath,
     freeRegs   :: [RegAddr]
@@ -43,7 +46,7 @@ initArp = [Load (ImmValue 0) regArp]
 
 -- occupies a free register
 occupyReg :: Context -> (RegAddr, Context)
-occupyReg (Ctx s v p (r:rs)) = (r, Ctx s v p rs)
+occupyReg (Ctx a b c d (r:rs)) = (r, Ctx a b c d rs)
 
 -- finds a free register
 findReg :: Context -> RegAddr
@@ -86,9 +89,9 @@ incrMem ctx name = addMem ctx name 1
 -- adds value to a variable in memory
 addMem :: Context -> VarName -> Integer -> [Instruction]
 addMem ctx name val = let (reg2, ctx2) = occupyReg ctx in
-       loadVar ctx2 name reg2 0
+       loadVar ctx2 name reg2
     ++ addImm  ctx2 val  reg2 
-    ++ putVar  ctx2 name reg2 0
+    ++ putVar  ctx2 name reg2
 
 -- loads from memory with an offset
 loadAI :: Context -> RegAddr -> Offset -> RegAddr -> [Instruction]
@@ -129,13 +132,21 @@ printChar reg c = [Load (ImmValue $ ord c) reg, WriteInstr reg charIO]
 -----------------------------------------------------------------------------
 
 -- loads a variable from memory to a register
-loadVar :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
-loadVar ctx name reg idx = applyVar ctx name 
+loadVar :: Context -> VarName -> RegAddr -> [Instruction]
+loadVar ctx name reg = loadVarAtIdx ctx name reg 0
+
+-- loads a variable from memory to a register at the given index
+loadVarAtIdx :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
+loadVarAtIdx ctx name reg idx = applyVar ctx name 
     $ \ctx regArp offset -> loadAI ctx regArp (offset + idx) reg
 
 -- updates a variable from a register
-putVar :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
-putVar ctx name reg idx = applyVar ctx name
+putVar :: Context -> VarName -> RegAddr -> [Instruction]
+putVar ctx name reg = putVarAtIdx ctx name reg 0
+
+-- updates a variable from a register at the given index
+putVarAtIdx :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
+putVarAtIdx ctx name reg idx = applyVar ctx name
     $ \ctx regArp offset -> storeAI ctx reg regArp (offset + idx)
 
 -- update an array with values
@@ -179,7 +190,7 @@ getVar ctx name = fromJust $ Map.lookup name varMap
     where (varMap, _, _) = getScope ctx
 
 -- gets current scope information
-getScope :: Context -> (VarMap, Depth, ScopeSize)
+getScope :: Context -> (VarMap, Depth, Size)
 getScope ctx = fromJust $ Map.lookup (ctxScopeId ctx) (scopeMap ctx)
 
 -----------------------------------------------------------------------------
@@ -189,41 +200,29 @@ getScope ctx = fromJust $ Map.lookup (ctxScopeId ctx) (scopeMap ctx)
 -- puts instructions inside a scope
 putInScope :: Context -> [Instruction] -> [Instruction]
 putInScope ctx body = 
-       putVar ctx "_arp" regArp 0
+       putVar ctx "_arp" regArp
     ++ setNextArp ctx 
     ++ body 
     ++ loadAI ctx regArp (-1) regArp
 
 -- updates register with a data pointer
 setNextArp :: Context -> [Instruction]
-setNextArp ctx@(Ctx scopeId scopeMap _ _) =
-    [loadImm scopeSize reg, Compute Add reg regArp regArp]
-    where 
-        (_, _, scopeSize) = fromJust $ Map.lookup scopeId scopeMap
+setNextArp ctx = [loadImm scopeSize reg, Compute Add reg regArp regArp]
+    where  
+        (_, _, scopeSize) = getScope ctx
         reg = findReg ctx
 
 -- updates the current scope
-applyScopeId :: (ScopeID -> ScopeID) -> Context -> Context
-applyScopeId apply (Ctx scope a b c) = Ctx (apply scope) a b c
+applyScope :: (ScopeID -> ScopeID) -> Context -> Context
+applyScope apply (Ctx scope a b c d) = Ctx (apply scope) a b c d
 
 -- updates context for the next scope
 inScopeCtx :: Context -> Context
-inScopeCtx = applyScopeId (\id -> id + 1)
+inScopeCtx = applyScope (\id -> id + 1)
 
 -- updates context for the next "else" scope
 inScopeCtxElse :: Context -> Context
-inScopeCtxElse ctx = applyScopeId (\_ -> nextId) ctx
+inScopeCtxElse ctx = applyScope (\_ -> nextId) ctx
     where 
         id     = ctxScopeId ctx
-        nextId = nextNum (id + 1) (childScopes id $ scopePath ctx)
-
--- finds the next number in a sorted array
-nextNum :: Integer -> [Integer] -> Integer
-nextNum x (y:ys) = if x < y then y else nextNum x ys 
-
--- finds scopes directly contained within the given scope 
-childScopes :: ScopeID -> ScopePath -> [ScopeID]
-childScopes _ [] = []
-childScopes p ((cx,px):xs)
-    | p == px = cx : childScopes p xs
-    | otherwise = childScopes p xs
+        nextId = fromJust $ Map.lookup id (scopePath ctx)

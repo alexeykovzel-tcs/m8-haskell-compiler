@@ -4,8 +4,17 @@ import Sprockell
 import Compiler
 import Control.Monad (join)
 
-runDemo :: FilePath -> IO() 
-runDemo file = runFiles 1 ("demo/" ++ file ++ ".txt") 
+arrays    = "demo/arrays.txt"
+banking   = "demo/banking.txt"
+fib       = "demo/fib.txt"
+funs      = "demo/funs.txt"
+peterson  = "demo/peterson.txt"
+scopes    = "demo/scopes.txt"
+string    = "demo/string.txt"
+while     = "demo/while.txt"
+
+runFile :: FilePath -> IO() 
+runFile file = runFiles 1 file
 
 runFiles :: Int -> FilePath -> IO()
 runFiles n file = join $ runProgs n <$> readFile file

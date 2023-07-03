@@ -8,6 +8,7 @@ import PreCompiler
 import PostParser
 import Parser
 import Debug.Trace
+import Data.Maybe
 import Data.Char (ord)
 import qualified Data.Map as Map
 
@@ -36,6 +37,16 @@ compileStmt ctx stmt = case stmt of
 
     InScope script  -> simpleScope ctx script
     Action expr     -> voidExpr ctx expr
+
+    -- FunDef name argsDef returnType script
+    --     -> putInScope ctx $ fun
+    --     where
+    --         fun    = args ++ body
+    --         body   = compileScript ctxScp script
+    --         args   = []
+    --         ctxScp = inScopeCtx ctx
+ 
+    -- ReturnVal expr -> 
 
     WhileLoop expr script -> cond ++ body
         where
@@ -70,7 +81,7 @@ updateVar ctx name idx expr = case expr of
     where 
         (reg2, ctx2)    = occupyReg ctx
         exprToReg       = compileExpr ctx2 expr reg2
-        varToMem        = putVar ctx2 name reg2 idx
+        varToMem        = putVarAtIdx ctx2 name reg2 idx
 
 -- compiles an expression, which result is ignored
 voidExpr :: Context -> Expr -> [Instruction]
@@ -97,10 +108,10 @@ compileExpr ctx expr reg = case expr of
     Both    e1 e2 -> compileBin ctx e1 e2 reg And
     OneOf   e1 e2 -> compileBin ctx e1 e2 reg Or
 
-    Var name  -> loadVar ctx name reg 0
+    Var name  -> loadVar ctx name reg
     Fixed val -> [loadImm (intVal val) reg]
 
-    ArrAccess name idx -> loadVar ctx name reg idx
+    ArrAccess name idx -> loadVarAtIdx ctx name reg idx
 
     Ternary expr1 expr2 expr3
         -> cond ++ ifBody ++ elseBody
@@ -110,7 +121,7 @@ compileExpr ctx expr reg = case expr of
             elseBody  = compileExpr ctx expr3 reg
 
     FunCall "set_thread_id" [Var name]
-        -> putVar ctx name regSprID 0
+        -> putVar ctx name regSprID
 
     FunCall "thread_create" [Fixed (Int threadId)]
         -> printStrLn ctx ("create thread: " ++ show threadId)
@@ -128,6 +139,22 @@ compileExpr ctx expr reg = case expr of
     FunCall "print" [expr]
         -> compileExpr ctx expr reg 
         ++ [WriteInstr reg numberIO] 
+
+    -- Update ARP 
+    -- Load return address
+    -- Load arguments
+    -- Jump to codeAddr
+    FunCall name args
+        ->  [
+                -- loadImm codeAddr regArp,
+                -- addImm ctx2 regPC reg2
+                -- putVar ctx2 "_ra" reg2      -- set return address
+                -- Jump $ Abs codeAddr
+            ]
+        where 
+            (scopeId, codeAddr)    = fromJust $ Map.lookup name (funMap ctx)
+            (varMap, depth, size)  = fromJust $ Map.lookup scopeId (scopeMap ctx)
+            (reg2, ctx2)           = occupyReg ctx
 
 -- translates parsed values to integers
 intVal :: Parser.Value -> Integer
