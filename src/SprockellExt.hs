@@ -21,10 +21,11 @@ type ScopeID    = Integer
 type ScopePath  = Map ScopeID ScopeID
 type ScopeMap   = Map ScopeID (VarMap, Depth, Size)
 
-type FunMap     = Map FunName (ScopeID, CodeAddr)
+type FunMap     = Map FunName (ScopeID, Depth)
 
 data Context = Ctx {
-    ctxScopeId :: ScopeID,
+    scopeId    :: ScopeID,
+    peerId     :: ScopeID,
     funMap     :: FunMap,
     scopeMap   :: ScopeMap,
     scopePath  :: ScopePath,
@@ -46,7 +47,8 @@ initArp = [Load (ImmValue 0) regArp]
 
 -- occupies a free register
 occupyReg :: Context -> (RegAddr, Context)
-occupyReg (Ctx a b c d (r:rs)) = (r, Ctx a b c d rs)
+occupyReg ctx = (r, ctx {freeRegs = rs})
+    where (r:rs) = freeRegs ctx
 
 -- finds a free register
 findReg :: Context -> RegAddr
@@ -77,6 +79,11 @@ jumpOver body = [Jump $ Rel $ length body + 1]
 jumpBack :: [[Instruction]] -> [Instruction]
 jumpBack parts = [Jump $ Rel $ -partsLen + 1]
     where partsLen = foldl (\a b -> a + length b) 0 parts
+
+-- jumps to the address stored in the variable
+jumpVar :: Context -> VarName -> [Instruction]
+jumpVar ctx name = loadVar ctx2 name reg2 ++ [Jump $ Ind reg2]
+    where (reg2, ctx2) = occupyReg ctx
 
 -----------------------------------------------------------------------------
 -- memory management
@@ -140,6 +147,13 @@ loadVarAtIdx :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
 loadVarAtIdx ctx name reg idx = applyVar ctx name 
     $ \ctx regArp offset -> loadAI ctx regArp (offset + idx) reg
 
+-- update a variable from a register + value
+putVarAdd :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
+putVarAdd ctx name reg val = let (reg2, ctx2) = occupyReg ctx
+    in copyReg reg reg2
+    :  addImm ctx2 val reg2
+    ++ putVar ctx2 name reg2
+
 -- updates a variable from a register
 putVar :: Context -> VarName -> RegAddr -> [Instruction]
 putVar ctx name reg = putVarAtIdx ctx name reg 0
@@ -148,6 +162,22 @@ putVar ctx name reg = putVarAtIdx ctx name reg 0
 putVarAtIdx :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
 putVarAtIdx ctx name reg idx = applyVar ctx name
     $ \ctx regArp offset -> storeAI ctx reg regArp (offset + idx)
+
+-- stores a program counter in a variable
+putPC :: Context -> VarName -> [Instruction]
+putPC ctx name = applyVar ctx name
+    $ \ctx arpReg offset -> 
+    let
+        (reg2, ctx2) = occupyReg ctx 
+        reg3 = findReg ctx2
+    in [
+        loadImm offset reg2,
+        Compute Add reg2 arpReg arpReg,
+        copyReg regPC reg2,
+        loadImm 5 reg3,
+        Compute Add reg2 reg3 reg2,
+        Store reg2 (IndAddr arpReg)
+    ]
 
 -- update an array with values
 putArrImm :: Context -> VarName -> [Integer] -> [Instruction]
@@ -186,12 +216,15 @@ loadArp ctx n reg = loadArp ctx (n - 1) reg ++ loadAI ctx reg (-1) reg
 
 -- gets variable information by name
 getVar :: Context -> VarName -> (VarPos, VarSize)
-getVar ctx name = fromJust $ Map.lookup name varMap
-    where (varMap, _, _) = getScope ctx
+getVar ctx name = 
+    let (varMap, _, _) = getScope ctx
+    in case Map.lookup name varMap of
+        Just var  -> var
+        Nothing   -> error $ "no such var: " ++ name ++ " " ++ (show $ scopeId ctx)
 
 -- gets current scope information
 getScope :: Context -> (VarMap, Depth, Size)
-getScope ctx = fromJust $ Map.lookup (ctxScopeId ctx) (scopeMap ctx)
+getScope ctx = fromJust $ Map.lookup (scopeId ctx) (scopeMap ctx)
 
 -----------------------------------------------------------------------------
 -- scope management
@@ -205,24 +238,21 @@ putInScope ctx body =
     ++ body 
     ++ loadAI ctx regArp (-1) regArp
 
--- updates register with a data pointer
+-- updates register with an ARP pointer
 setNextArp :: Context -> [Instruction]
 setNextArp ctx = [loadImm scopeSize reg, Compute Add reg regArp regArp]
     where  
         (_, _, scopeSize) = getScope ctx
         reg = findReg ctx
 
--- updates the current scope
-applyScope :: (ScopeID -> ScopeID) -> Context -> Context
-applyScope apply (Ctx scope a b c d) = Ctx (apply scope) a b c d
+childCtx :: Context -> Context
+childCtx ctx = ctx { scopeId = peerId ctx, peerId = peerId ctx + 1 }
 
--- updates context for the next scope
-inScopeCtx :: Context -> Context
-inScopeCtx = applyScope (\id -> id + 1)
+peerCtx :: Context -> Context
+peerCtx ctx = nextPeer $ ctx { scopeId = updatePeer ctx $ scopeId ctx }
 
--- updates context for the next "else" scope
-inScopeCtxElse :: Context -> Context
-inScopeCtxElse ctx = applyScope (\_ -> nextId) ctx
-    where 
-        id     = ctxScopeId ctx
-        nextId = fromJust $ Map.lookup id (scopePath ctx)
+nextPeer :: Context -> Context
+nextPeer ctx = ctx { peerId = updatePeer ctx $ peerId ctx }
+
+updatePeer :: Context -> ScopeID -> ScopeID
+updatePeer ctx id = fromJust $ Map.lookup id (scopePath ctx)

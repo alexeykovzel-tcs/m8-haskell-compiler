@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Compiler (compile) where
+module Compiler (compile, precompile) where
 
 import Sprockell
 import SprockellExt
@@ -16,8 +16,8 @@ import qualified Data.Map as Map
 compile :: String -> [Instruction]
 compile code = initArp ++ progASM ++ [EndProg]
     where
-        prog     = postParse $ tryParse script code
-        progASM  = compileScript (initCtx prog) prog
+        prog            = postScript $ tryParse script code
+        progASM         = compileScript (initCtx prog) prog
 
 -----------------------------------------------------------------------------
 -- script compilation
@@ -25,7 +25,18 @@ compile code = initArp ++ progASM ++ [EndProg]
 
 compileScript :: Context -> Script -> [Instruction]
 compileScript ctx [] = []
-compileScript ctx (x:xs) = (compileStmt ctx x) ++ (compileScript ctx xs)
+compileScript ctx (x:xs) = (compileStmt ctx x) 
+    -- ++ (compileScript ctx xs)
+    ++ (compileScript (toPeerCtx ctx x) xs)
+
+toPeerCtx :: Context -> Statement -> Context
+toPeerCtx ctx stmt = case stmt of
+    InScope _               -> nextPeer ctx
+    FunDef _ _ _ _          -> nextPeer ctx
+    WhileLoop _ _           -> nextPeer ctx
+    Condition _ _ Nothing   -> nextPeer ctx
+    Condition _ _ (Just _)  -> nextPeer $ nextPeer ctx
+    stmt                    -> ctx
 
 compileStmt :: Context -> Statement -> [Instruction]
 compileStmt ctx stmt = case stmt of
@@ -35,43 +46,44 @@ compileStmt ctx stmt = case stmt of
     VarAssign name expr            -> updateVar ctx name 0 expr
     ArrInsert name idx expr        -> updateVar ctx name idx expr
 
-    InScope script  -> simpleScope ctx script
-    Action expr     -> voidExpr ctx expr
+    InScope script   -> childScope ctx script
+    Action expr      -> voidExpr ctx expr
 
-    -- FunDef name argsDef returnType script
-    --     -> putInScope ctx $ fun
-    --     where
-    --         fun    = args ++ body
-    --         body   = compileScript ctxScp script
-    --         args   = []
-    --         ctxScp = inScopeCtx ctx
- 
-    -- ReturnVal expr -> 
+    FunDef name args returnType script 
+        -> putPC ctx ("_f_" ++ name)
+        ++ jumpOver funBlock 
+        ++ funBlock
+        where
+            ctxScp       = childCtx ctx
+            (reg2, ctx2) = occupyReg ctxScp
+            body         = compileScript ctxScp script
+            returnAddr   = loadVar ctx2 "_rtn" reg2
+            callerArp    = loadVar ctx2 "_sl" regArp
+            funBlock     = body ++ returnAddr
+                           ++ callerArp ++ [Jump $ Ind reg2]
 
     WhileLoop expr script -> cond ++ body
         where
             cond      = skipCond ctx expr body
-            body      = simpleScope ctx script ++ jumpBack [body, cond]
+            body      = childScope ctx script ++ jumpBack [body, cond]
 
     Condition expr ifScript Nothing -> cond ++ ifBody
         where
             cond      = skipCond ctx expr ifBody
-            ifBody    = simpleScope ctx ifScript
+            ifBody    = childScope ctx ifScript
 
     Condition expr ifScript (Just elseScript) 
         -> cond ++ ifBody ++ elseBody
         where
             cond      = skipCond ctx expr ifBody
-            ifBody    = simpleScope ctx ifScript ++ jumpOver elseBody
-            elseBody  = elseScope ctx elseScript
+            ifBody    = childScope ctx ifScript ++ jumpOver elseBody
+            elseBody  = peerScope ctx elseScript
 
--- sets context scope for a script
-simpleScope :: Context -> Script -> [Instruction]
-simpleScope ctx = putInScope ctx . compileScript (inScopeCtx ctx)
+childScope :: Context -> Script -> [Instruction]
+childScope ctx = putInScope ctx . compileScript (childCtx ctx)
 
--- sets context scope for the "else" script
-elseScope :: Context -> Script -> [Instruction]
-elseScope ctx = putInScope ctx . compileScript (inScopeCtxElse ctx)
+peerScope :: Context -> Script -> [Instruction]
+peerScope ctx = putInScope ctx . compileScript (peerCtx ctx)
 
 -- compiles an expression, which result is stored in a variable
 updateVar :: Context -> VarName -> Integer -> Expr -> [Instruction]
@@ -120,14 +132,8 @@ compileExpr ctx expr reg = case expr of
             ifBody    = compileExpr ctx expr2 reg ++ jumpOver elseBody
             elseBody  = compileExpr ctx expr3 reg
 
-    FunCall "set_thread_id" [Var name]
+    FunCall "set_process_id" [Var name]
         -> putVar ctx name regSprID
-
-    FunCall "thread_create" [Fixed (Int threadId)]
-        -> printStrLn ctx ("create thread: " ++ show threadId)
-
-    FunCall "thread_join" [Fixed (Int threadId)]
-        -> printStrLn ctx ("join thread: " ++ show threadId)
  
     FunCall "print_str" [Fixed msg]
         -> printStrLn ctx (show msg)
@@ -140,21 +146,20 @@ compileExpr ctx expr reg = case expr of
         -> compileExpr ctx expr reg 
         ++ [WriteInstr reg numberIO] 
 
-    -- Update ARP 
-    -- Load return address
-    -- Load arguments
-    -- Jump to codeAddr
-    FunCall name args
-        ->  [
-                -- loadImm codeAddr regArp,
-                -- addImm ctx2 regPC reg2
-                -- putVar ctx2 "_ra" reg2      -- set return address
-                -- Jump $ Abs codeAddr
-            ]
+    FunCall name args 
+        -> loadVar ctx ("_f_" ++ name) reg
+        ++ loadArp ctx2 (scopeDepth - depth) reg2
+        ++ putVar ctx2 "_arp" reg2
+        ++ [copyReg regArp reg2]
+        ++ setNextArp ctx2
+        ++ putVar funCtx "_sl" reg2
+        ++ putPC funCtx "_rtn"
+        ++ [Jump $ Ind reg]
         where 
-            (scopeId, codeAddr)    = fromJust $ Map.lookup name (funMap ctx)
-            (varMap, depth, size)  = fromJust $ Map.lookup scopeId (scopeMap ctx)
-            (reg2, ctx2)           = occupyReg ctx
+            (reg2, ctx2)        = occupyReg ctx
+            (_, scopeDepth, _)  = getScope ctx
+            (scopeId, depth)    = fromJust $ Map.lookup name (funMap ctx)
+            funCtx              = ctx2 { scopeId = scopeId }
 
 -- translates parsed values to integers
 intVal :: Parser.Value -> Integer
