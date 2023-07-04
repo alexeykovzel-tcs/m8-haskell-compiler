@@ -17,7 +17,8 @@ languageDef = emptyDef {
     ],
     Token.reservedNames   = [ 
         "let", "struct", "fun", "for", "while", "if", "return",
-        "Int", "String", "Char", "Bool", "none", "false", "true"
+        "Int", "String", "Char", "Bool", "none", "false", "true",
+        "fork", "join"
     ],
     Token.commentStart = "/*",
     Token.commentEnd   = "*/",
