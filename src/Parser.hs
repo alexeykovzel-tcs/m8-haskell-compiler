@@ -36,6 +36,8 @@ data Statement
     | InScope       Script
     | ReturnVal     Expr
     | Action        Expr
+    | Fork          VarName Script
+    | Join          VarName
     deriving Show
 
 data LoopIter 
@@ -57,6 +59,8 @@ statement =
     <|> condition       -- e.g. if x < y { } else { }
     <|> returnVal       -- e.g. return x;
     <|> action          -- e.g. print(x);
+    <|> fork            -- e.g. fork x { }
+    <|> join            -- e.g. join x;
 
 varDecl :: Parser Statement
 varDecl = VarDecl
@@ -114,6 +118,15 @@ returnVal = ReturnVal
 
 action :: Parser Statement
 action = Action <$> expr <*  semi
+
+fork :: Parser Statement
+fork = Fork 
+    <$ reserved "fork" <*> name 
+    <*> braces script
+
+join :: Parser Statement 
+join = Join
+    <$ reserved "join" <*> name <* semi
 
 -----------------------------------------------------------------------------
 -- expression parsers
