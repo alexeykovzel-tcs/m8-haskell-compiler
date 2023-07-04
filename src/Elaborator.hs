@@ -34,11 +34,11 @@ data Context = Context ScopeMap ScopeVars deriving Show
 type TypeChecker = Either [Error] Context
 
 data Error 
-    = InvalidType   SourcePos String    -- applying operation to an invalid type
-    | DupDecl       SourcePos String    -- duplicate entity declaration
-    | MissingDecl   SourcePos String    -- calling non-existent entity
-    | NotAssigned   SourcePos String    -- using variable without value
-    | NoReturn      SourcePos String    -- function decl. without return
+    = InvalidType   String    -- applying operation to an invalid type
+    | DupDecl       String    -- duplicate entity declaration
+    | MissingDecl   String    -- calling non-existent entity
+    | NotAssigned   String    -- using variable without value
+    | NoReturn      String    -- function decl. without return
     deriving Show
 
 getArrayType :: DataType -> DataType
@@ -47,10 +47,11 @@ getArrayType (ArrType dataType _) = dataType
 -- Adds error to the list of errors
 addError :: Error -> TypeChecker -> TypeChecker
 addError error (Left errors) = Left $ error : errors
+addError error (Right context) = Right context
 
 -- Traverses TypeChecker to find a variable in (wrapping) scopeMap
 findVar :: VarName -> TypeChecker -> Maybe VarDef
-findVar _ (Right (Context (((-1,0), _), _) scopeVars)) = Nothing
+findVar _ (Right (Context (((0,0), _), _) scopeVars)) = Nothing
 findVar varName typeChecker@(Right (Context ((current, _), _) scopeVars)) 
                 | isJust types == False = findVar varName (decScope typeChecker)
                 | isJust varType == False = findVar varName (decScope typeChecker)
@@ -70,7 +71,7 @@ isDeclared (varName, _) typeChecker@(Right (Context ((current, _), _) scopeVars)
 addVar :: VarDef -> TypeChecker -> TypeChecker
 addVar varDef typeChecker@(Right (Context scopeMap scopeVars)) =
                 case (isDeclared varDef typeChecker) of
-                    True    -> error $ "DupDecl AddVar " ++ show varDef
+                    True    -> addError (DupDecl (show varDef)) typeChecker
                     False   -> Right $ Context scopeMap $ Map.insertWith (++) (fst (fst scopeMap)) [varDef] scopeVars
 
 -- Determines the type of the variable
@@ -85,7 +86,7 @@ checkAction :: Expr -> TypeChecker -> (DataType, TypeChecker)
 checkAction (Fixed value) typeChecker = (getType value, typeChecker)
 checkAction (Var varName) typeChecker = 
                 case (findVar varName typeChecker) of
-                    Nothing                   -> error "MissingDecl Action"
+                    Nothing                   -> error ("MissingDecl " ++ show varName)
                     Just (varName, dataType)  -> (dataType, typeChecker)
 checkAction expr typeChecker =
                 case (expr) of
@@ -103,7 +104,7 @@ checkAction expr typeChecker =
 checkIntOp :: Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
 checkIntOp left right typeChecker = 
                 case (leftDataType == rightDataType && leftDataType == IntType) of
-                    False -> error "InvalidType IntOp"
+                    False -> (IntType, addError (InvalidType (show leftDataType)) typeChecker)
                     True  -> (IntType, rightTypeChecker)
                 where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
                       (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
@@ -111,7 +112,7 @@ checkIntOp left right typeChecker =
 checkOp :: Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
 checkOp left right typeChecker = 
                 case (leftDataType == rightDataType) of
-                    False -> error "InvalidType Op"
+                    False -> (BoolType, addError (InvalidType (show leftDataType)) typeChecker)
                     True  -> (BoolType, rightTypeChecker)
                 where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
                       (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
@@ -119,7 +120,7 @@ checkOp left right typeChecker =
 checkBoolOp :: Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
 checkBoolOp left right typeChecker = 
                 case (leftDataType == rightDataType && leftDataType == BoolType) of
-                    False -> error "InvalidType BoolOp"
+                    False -> (BoolType, addError (InvalidType (show leftDataType)) typeChecker)
                     True  -> (BoolType, rightTypeChecker)
                 where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
                       (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
@@ -128,22 +129,22 @@ checkBoolOp left right typeChecker =
 checkVarDecl :: VarDef -> Maybe Expr -> TypeChecker -> TypeChecker
 checkVarDecl (varName, dataType) Nothing typeChecker = addVar (varName, dataType) typeChecker
 checkVarDecl (varName, dataType) (Just expr) typeChecker
-                | (dataType /= exprDataType) = error "MissingDecl VarDecl"
+                | (dataType /= exprDataType) = addError (MissingDecl (show varName)) typeChecker
                 | otherwise                  = addVar (varName, dataType) exprTypeChecker
                 where (exprDataType, exprTypeChecker) = checkAction expr typeChecker
 
 checkVarAssign :: VarName -> Expr -> TypeChecker -> TypeChecker
 checkVarAssign varName expr typeChecker
-                | isJust (findVar varName typeChecker) == False = error "MissingDecl VarAssign"
-                | (dataType /= exprDataType)                    = error "InvalidType VarAssign"
+                | isJust (findVar varName typeChecker) == False = addError (MissingDecl (show varName)) typeChecker
+                | (dataType /= exprDataType)                    = addError (InvalidType (show dataType)) typeChecker
                 | otherwise                                     = exprTypeChecker
                 where (_, dataType)                   = fromJust $ findVar varName typeChecker 
                       (exprDataType, exprTypeChecker) = checkAction expr typeChecker
 
 checkArrInsert :: VarName -> Integer -> Expr -> TypeChecker -> TypeChecker
 checkArrInsert varName index expr typeChecker
-                | isJust (findVar varName typeChecker) == False = error "MissingDecl ArrInsert"
-                | (getArrayType dataType /= exprDataType) = error "InvalidType ArrInsert"
+                | isJust (findVar varName typeChecker) == False = addError (MissingDecl (show varName)) typeChecker
+                | (getArrayType dataType /= exprDataType) = addError (InvalidType (show dataType)) typeChecker
                 | otherwise = exprTypeChecker
                 where (_, dataType) = fromJust $ findVar varName typeChecker
                       (exprDataType, exprTypeChecker) = checkAction expr typeChecker
@@ -194,7 +195,7 @@ elaborate script = check script initTypeChecker
 
 steasy :: Script
 steasy = tryParse script "let x: Int = 5; let y: Int = 0; \
-                         \{ let x: Int = 5; }"
+                         \{ z = 5; }"
 
 initTypeChecker :: TypeChecker
 initTypeChecker = Right $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty
