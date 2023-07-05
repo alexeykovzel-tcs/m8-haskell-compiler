@@ -1,5 +1,5 @@
 /* 
-    This file contains basic math operations with support 
+    This file contains basic mathematical operations with support 
     for division, exponentiation, etc.
 */
 

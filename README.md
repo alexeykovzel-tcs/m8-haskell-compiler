@@ -32,7 +32,7 @@ To run a specific file, use:
 stack run -- {file_path}
 ```
 
-To run prebuilt modules, use:
+To try functions of the prebuilt modules in /demo, use:
 
 ```bash
 stack run
@@ -40,10 +40,10 @@ stack run
 
 The following modules are available:
 
-| module | commands                 |
-| ------ | ------------------------ |
-| fib    | fib_rec, fib_iter        |
-| math   | incr, div, mod, pow, abs |
+| module | description                   | functions                                 |
+| ------ | ----------------------------- | ----------------------------------------- |
+| fib    | fibonacci sequence algorithms | fib_rec (recursive), fib_iter (iterative) |
+| math   | basic math library            | incr, div, mod, pow, abs                  |
 
 For example:
 
