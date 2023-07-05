@@ -1,14 +1,16 @@
-module Runner where
+module Debugger where
 
 import Sprockell
 import Compiler
 import Control.Monad (join)
 
+-- this file is for manual testing of the program
+
 runFile :: FilePath -> IO() 
 runFile file = runFiles 1 file
 
 runFiles :: Int -> FilePath -> IO()
-runFiles n file = join $ runProgs n <$> readFile file
+runFiles n file = join $ runProgs n <$> readFile file 
 
 runProgs :: Int -> String -> IO()
 runProgs n code = run $ replicate n $ compile code 

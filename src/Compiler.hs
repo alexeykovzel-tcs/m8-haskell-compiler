@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Compiler (compile, precompile) where
+module Compiler (compileRun, compile) where
 
 import Sprockell
 import SprockellExt
@@ -11,12 +11,22 @@ import Data.Maybe
 import Data.Char (ord)
 import qualified Data.Map as Map
 
--- compiles a string into the SpriL language
+compileRun :: String -> FunName -> [Integer] -> [Instruction]
+compileRun code funName args = compileAST $ ast 
+    ++ [Action $ FunCall "print" [FunCall funName funArgs]]
+    where 
+        ast      = parseWith script code
+        funArgs  = Fixed <$> Int <$> args
+
 compile :: String -> [Instruction]
-compile code = initArp ++ progASM ++ [EndProg]
+compile code = compileAST $ parseWith script code
+
+-- compiles a program AST into the SpriL language
+compileAST :: Script -> [Instruction]
+compileAST ast = initArp ++ progASM ++ [EndProg]
     where
-        prog            = postScript $ parseWith script code
-        progASM         = compileScript (initCtx prog) prog
+        prog     = postScript $ ast
+        progASM  = compileScript (initCtx prog) prog
 
 -----------------------------------------------------------------------------
 -- script compilation
@@ -193,9 +203,14 @@ compileExpr ctx expr reg = case expr of
             (scopeId, funDepth, argNames) 
                 = fromJust $ Map.lookup name (funMap ctx)
 
------------------------------------------------------------------------------
--- helper functions
------------------------------------------------------------------------------
+-- compiles a binary operation
+compileBin :: Context -> Expr -> Expr -> RegAddr -> Operator -> [Instruction]
+compileBin ctx e1 e2 reg op = let reg2 = findReg ctx
+    in compileExpr ctx e1 reg
+    ++ [Push reg]
+    ++ compileExpr ctx e2 reg
+    ++ [Pop reg2]
+    ++ [Compute op reg2 reg reg]
 
 -- evaluates function arguments and puts them onto the stack
 evalArgs :: Context -> RegAddr -> [Expr] -> [Instruction]
@@ -213,16 +228,16 @@ saveArgs ctx (name:xs) = [Pop reg2]
     ++ saveArgs ctx xs
     where (reg2, ctx2) = occupyReg ctx
 
+-----------------------------------------------------------------------------
+-- helper functions
+-----------------------------------------------------------------------------
+
 -- translates parsed values to integers
 intVal :: Parser.Value -> Integer
 intVal (Int val)    = val
 intVal (Bool val)   = intBool val
 intVal (Char val)   = toInteger $ ord val
 intVal val = error $ "failed translating value: " ++ show val
-
--- updates a variable in memory
-updateVar :: Context -> VarName -> Expr -> [Instruction]
-updateVar ctx name expr = updateVarAtIdx ctx name 0 expr
 
 -- updates a variable in memory at the given index
 updateVarAtIdx :: Context -> VarName -> Integer -> Expr -> [Instruction]
@@ -234,18 +249,13 @@ updateVarAtIdx ctx name idx expr = case expr of
         exprToReg       = compileExpr ctx2 expr reg2
         varToMem        = putVarAtIdx ctx2 name reg2 idx
 
+-- updates a variable in memory
+updateVar :: Context -> VarName -> Expr -> [Instruction]
+updateVar ctx name expr = updateVarAtIdx ctx name 0 expr
+
 -- compiles a "skip" condition from an expression
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 
 skipCond ctx expr body = let (reg2, ctx2) = occupyReg ctx in
        compileExpr ctx2 expr reg2
     ++ [Compute Equal reg2 reg0 reg2]
     ++ branchOver reg2 body
-
--- compiles a binary operation
-compileBin :: Context -> Expr -> Expr -> RegAddr -> Operator -> [Instruction]
-compileBin ctx e1 e2 reg op = let reg2 = findReg ctx
-    in compileExpr ctx e1 reg
-    ++ [Push reg]
-    ++ compileExpr ctx e2 reg
-    ++ [Pop reg2]
-    ++ [Compute op reg2 reg reg]

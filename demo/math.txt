@@ -1,6 +1,6 @@
 /* 
-    This file is a basic math library with support for 
-    division, exponentiation, etc.
+    This file contains basic math operations with support 
+    for division, exponentiation, etc.
 */
 
 // increments a value
@@ -10,8 +10,11 @@ fun incr(a: Int) -> Int {
 
 // calculates a quotient after division 
 fun div(a: Int, b: Int) -> Int {
+    if b <= 0 {
+        return -1;
+    }
     let k: Int = 0;
-    while a > b {
+    while a >= b {
         a = a - b;
         k = k + 1;
     }
@@ -20,7 +23,7 @@ fun div(a: Int, b: Int) -> Int {
 
 // calculates a remainder after division
 fun mod(a: Int, b: Int) -> Int {
-    while a > b {
+    while a >= b {
         a = a - b;
     }
     return a;
@@ -39,9 +42,3 @@ fun pow(a: Int, b: Int) -> Int {
 fun abs(a: Int) -> Int {
     return a >= 0 ? a : -a;
 }
-
-print(incr(11));        // result: 12
-print(pow(2, 5));       // result: 32
-print(div(61, 3));      // result: 20
-print(mod(61, 3));      // result: 1
-print(abs(-5));         // result: 5

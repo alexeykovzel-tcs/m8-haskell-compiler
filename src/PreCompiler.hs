@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module PreCompiler (initCtx, precompile, postScript) where
+module PreCompiler (initCtx, postScript) where
 
 import Parser
 import SprockellExt
@@ -10,9 +10,10 @@ import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+-- initial context for compilation
 initCtx :: Script -> Context
 initCtx prog = Ctx 0 1 (funs ctx) (scopes ctx) (path ctx) userRegs
-    where ctx = findScopes prog
+    where ctx = studyScopes prog
 
 -----------------------------------------------------------------------------
 -- post parser
@@ -54,7 +55,7 @@ postStmt (ForLoop i@(name, _) (IterRange from to) body) = [
 postStmt stmt = [stmt]
 
 -----------------------------------------------------------------------------
--- scope information
+-- scope informer
 -----------------------------------------------------------------------------
 
 type VarTable = [(VarName, (VarPos, VarSize))]
@@ -69,8 +70,8 @@ data ScopeCtx = ScopeCtx {
 }
 
 -- collects information about program scopes
-findScopes :: Script -> ScopeCtx
-findScopes prog = allocScript prog initCtx
+studyScopes :: Script -> ScopeCtx
+studyScopes prog = allocScript prog initCtx
     where
         mainScope = (0, (Map.empty, 0, 0))
         initCtx = ScopeCtx {
@@ -191,32 +192,3 @@ allocVars (x:xs) varPos@(depth, offset) = case x of
 measureVar :: DataType -> VarSize
 measureVar (ArrType _ size) = size
 measureVar _ = 1
-
------------------------------------------------------------------------------
--- testing
------------------------------------------------------------------------------
-
-precompile :: FilePath -> IO()
-precompile file = do
-    scopeList <- Map.toList <$> scopes <$> scopeCtx
-    scopePath <- path <$> scopeCtx 
-    printScopes scopeList
-    putStrLn $ show scopePath ++ "\n"
-    where
-        prog      = postScript <$> parseWith script <$> readFile file
-        scopeCtx  = findScopes <$> prog
-
-printScopes :: [(ScopeID, (VarMap, Depth, Size))] -> IO()
-printScopes scopes = putStrLn $ "\n" ++ scopeTable scopes
-
-scopeTable :: [(ScopeID, (VarMap, Depth, Size))] -> String
-scopeTable [] = ""
-scopeTable (x:xs) = let (id, (vars, depth, size)) = x
-    in show (id, depth, size) ++ " | " 
-        ++ scopeRow (Map.toList vars) 
-        ++ "\n" ++ scopeTable xs
-
-scopeRow :: [(VarName, (VarPos, VarSize))] -> String
-scopeRow [] = ""
-scopeRow (x:xs) = let (name, (pos, _)) = x 
-    in unwords [show name, show pos, scopeRow xs]

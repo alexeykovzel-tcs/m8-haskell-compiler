@@ -1,14 +1,51 @@
-## How to use?
+# PP Final Project: AlphaScript
 
-Run the following command:
+This project ... bla bla bla
+
+## Prerequisites
+
+Make sure you have installed:
+
+- Stack (<https://docs.haskellstack.org/en/stable/README/>). Version needs to be 2.7 or higher.
+
+To test if you have these tools set up properly, run the following command in the command line:
 
 ```bash
-stack ghci src/Runner.hs
+stack --version
 ```
 
-Then, you can have following options:
+## Compiling
+
+In a terminal, run:
+
+```bash
+stack build
+```
+
+This installs a local version of GHC and the libraries needed. The files in `src/` and `app/` are then compiled.
+
+## Running
+
+To run a specific file, use:
+
+```bash
+stack run -- {file_path}
+```
+
+To run prebuilt modules, use:
+
+```bash
+stack run
+```
+
+The following modules are available:
+
+\[fib\]     fib_rec, fib_iter
+\[math\]    incr, div, mod, pow, abs
+
+For example:
 
 ```haskell
-runFile "demo/fib.txt"                    -- run program in a file
-runProg "for i in 1..3 { print (i); }"    -- run program as a string
+math div 100 5      -- results in 20
+fib fib_iter 10     -- results in 55
 ```
