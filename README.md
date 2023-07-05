@@ -40,8 +40,10 @@ stack run
 
 The following modules are available:
 
-\[fib\]     fib_rec, fib_iter
-\[math\]    incr, div, mod, pow, abs
+| module | commands                 |
+| ------ | ------------------------ |
+| fib    | fib_rec, fib_iter        |
+| math   | incr, div, mod, pow, abs |
 
 For example:
 
