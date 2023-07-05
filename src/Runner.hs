@@ -4,15 +4,6 @@ import Sprockell
 import Compiler
 import Control.Monad (join)
 
-arrays    = "demo/arrays.txt"
-banking   = "demo/banking.txt"
-fib       = "demo/fib.txt"
-funs      = "demo/funs.txt"
-peterson  = "demo/peterson.txt"
-scopes    = "demo/scopes.txt"
-string    = "demo/string.txt"
-while     = "demo/while.txt"
-
 runFile :: FilePath -> IO() 
 runFile file = runFiles 1 file
 
@@ -35,10 +26,10 @@ showLocalMem (_, systemState) =
     show $ localMem $ head $ sprStates systemState
     
 printFileASM :: FilePath -> IO()
-printFileASM file = join $ printASM <$> readFile file
+printFileASM file = join $ printASM <$> compile <$> readFile file
 
-printASM :: String -> IO()
-printASM code = do
+printASM :: [Instruction] -> IO()
+printASM asm = do
     putStrLn ""
-    mapM_ print (compile code)
+    mapM_ putStrLn $ zipWith (\i instr -> show i ++ ": " ++ show instr) [0..] asm
     putStrLn ""

@@ -19,7 +19,6 @@ library
       Elaborator
       Lexer
       Parser
-      PostParser
       PreCompiler
       Runner
       SprockellExt
@@ -44,7 +43,6 @@ executable alphascript-exe
       Elaborator
       Lexer
       Parser
-      PostParser
       PreCompiler
       SprockellExt
       Paths_alphascript

@@ -16,9 +16,6 @@ cabal.sandbox.config
 *.dyn_o
 *.dyn_hi
 
-editor.txt
-playground.txt
-
 # IDE/Editor directories
 .vscode/
 .idea/
