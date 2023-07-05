@@ -53,7 +53,6 @@ getType :: Value -> DataType
 getType (Bool _) = BoolType
 getType (Char _) = CharType
 getType (Int _) = IntType
-getType (Arr [Char _]) = StrType
 
 -- Traverses TypeChecker to find a variable in (wrapping) scopeMap
 findVar :: VarName -> TypeChecker -> Maybe VarDef
@@ -205,7 +204,7 @@ generateErrorMessages (TypeChecker ((NotAssigned varName):xs) context)
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let x: Bool = 5 && true;"
+steasy = parseWith script "let x: Bool = 5 && true;"
 
 initTypeChecker :: TypeChecker
 initTypeChecker = TypeChecker [] $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty

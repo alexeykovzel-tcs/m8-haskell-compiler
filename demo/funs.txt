@@ -1,8 +1,0 @@
-let age: Int = 20;
-
-if age < 18 {
-    print_str("Illegal age");
-} else {
-    let age: Int = 20;
-    print_str("Here is your beer");
-}
