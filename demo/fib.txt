@@ -1,30 +1,31 @@
-// fun fib(n: Int) -> Int {
-//     let a: Int = 0;
-//     let b: Int = 1;
-//     let c: Int;
-// 
-//     while n >= 2 {
-//         c = a + b;
-//         a = b;
-//         b = c;
-//         n = n - 1;
-//     }
-//     return b;
-// }
+/*
+    This file contains algorithms for the fibonacci sequence.
 
-// fun fib_rec(n: Int) -> Int {
-//     if n <= 1 { 
-//         return n;
-//     }
-//     return fib_rec(n - 1) + fib_rec(n - 2);
-// }
+    Note that as there is a strict restriction on memory (32 blocks),
+    the recursive approach might not work for n > 5.
+*/
 
-fun ex_rec(n: Int) -> Int {
-    if n == 0 {
-        return 7;
-    } else {
-        return ex_rec(n - 1);
+// iterative algorithm for the fibonacci sequence
+fun fib_iter(n: Int) -> Int {
+    let a: Int = 0;
+    let b: Int = 1;
+    let c: Int;
+
+    while n >= 2 {
+        c = a + b;
+        a = b;
+        b = c;
+        n = n - 1;
     }
+    return b;
 }
 
-// print(ex_rec(10));
+// recursive algorithm for the fibonacci sequence
+fun fib_rec(n: Int) -> Int {
+    return n > 1
+        ? fib_rec(n - 1) + fib_rec(n - 2)
+        : n;
+}
+
+print(fib_iter(10));    // result: 55
+print(fib_rec(5));      // result: 5

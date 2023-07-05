@@ -252,7 +252,7 @@ childCtx :: Context -> Context
 childCtx ctx = ctx { scopeId = peerId ctx, peerId = peerId ctx + 1 }
 
 peerCtx :: Context -> Context
-peerCtx ctx = nextPeer $ ctx { scopeId = updatePeer ctx $ scopeId ctx }
+peerCtx ctx = nextPeer $ ctx { scopeId = updatePeer ctx $ scopeId ctx + 1 }
 
 nextPeer :: Context -> Context
 nextPeer ctx = ctx { peerId = updatePeer ctx $ peerId ctx }

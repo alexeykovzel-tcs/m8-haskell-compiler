@@ -91,7 +91,7 @@ compileStmt ctx stmt = case stmt of
         where
             cond      = skipCond ctx expr ifBody
             ifBody    = childScope ctx ifScript ++ jumpOver elseBody
-            elseBody  = putInScope ctx $ compileScript (peerCtx ctx) elseScript
+            elseBody  = peerScope ctx elseScript
 
 -- handles a function return
 prepReturn :: Context -> [Instruction]
@@ -104,6 +104,10 @@ prepReturn ctx = returnAddr ++ callerArp ++ [Jump $ Ind reg2]
 -- puts a script in the child context
 childScope :: Context -> Script -> [Instruction]
 childScope ctx = putInScope ctx . compileScript (childCtx ctx)
+
+-- puts a script in the peer context
+peerScope :: Context -> Script -> [Instruction]
+peerScope ctx = putInScope ctx . compileScript (peerCtx ctx)
 
 -----------------------------------------------------------------------------
 -- expression compilation
@@ -163,8 +167,10 @@ compileExpr ctx expr reg = case expr of
         ++ [WriteInstr reg numberIO] 
 
     FunCall name args
+        -- eval arguments and put them on the stack
+        -> evalArgs ctx reg args
         -- get function's address
-        -> loadVar ctx ("_f_" ++ name) reg
+        ++ loadVar ctx ("_f_" ++ name) reg
         -- get function's ARP based on its depth
         ++ loadArp ctx2 (depth - funDepth) reg2
         ++ putVar ctx2 "_arp" reg2
@@ -173,8 +179,8 @@ compileExpr ctx expr reg = case expr of
         ++ setNextArp ctx2
         -- save caller's ARP 
         ++ putVar funCtx "_link" reg2
-        -- save caller's arguments
-        ++ updateVars funCtx argNames args
+        -- save caller's arguments from the stack
+        ++ saveArgs funCtx (reverse argNames)
         -- save return address
         ++ putPC funCtx "_rtn_addr"
         ++ [Jump $ Ind reg]
@@ -191,19 +197,28 @@ compileExpr ctx expr reg = case expr of
 -- helper functions
 -----------------------------------------------------------------------------
 
+-- evaluates function arguments and puts them onto the stack
+evalArgs :: Context -> RegAddr -> [Expr] -> [Instruction]
+evalArgs ctx reg [] = []
+evalArgs ctx reg (expr:xs) = 
+    compileExpr ctx expr reg 
+    ++ [Push reg] 
+    ++ evalArgs ctx reg xs
+
+-- saves function arguments in memory
+saveArgs :: Context -> [VarName] -> [Instruction]
+saveArgs _ [] = []
+saveArgs ctx (name:xs) = [Pop reg2] 
+    ++ putVar ctx2 name reg2 
+    ++ saveArgs ctx xs
+    where (reg2, ctx2) = occupyReg ctx
+
 -- translates parsed values to integers
 intVal :: Parser.Value -> Integer
 intVal (Int val)    = val
 intVal (Bool val)   = intBool val
 intVal (Char val)   = toInteger $ ord val
 intVal val = error $ "failed translating value: " ++ show val
-
--- updates multiple variables in memory
-updateVars :: Context -> [VarName] -> [Expr] -> [Instruction]
-updateVars _ [] [] = []
-updateVars ctx (name:xs) (expr:ys) 
-    =  updateVar ctx name expr
-    ++ updateVars ctx xs ys
 
 -- updates a variable in memory
 updateVar :: Context -> VarName -> Expr -> [Instruction]

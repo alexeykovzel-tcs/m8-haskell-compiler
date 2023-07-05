@@ -1,10 +1,15 @@
+/*
+    This file demonstrates a fairly complex example of nested scoping
+    with variables having the same name but in different scopes. 
+*/
+
 let x: Int = 1;
 let y: Int = 2;
 let z: Int = 3;
 
-print(x); // 1
-print(y); // 2
-print(z); // 3
+print(x); // Result: 1
+print(y); // Result: 2
+print(z); // Result: 3
 
 print_str("-----------------");
 
@@ -33,6 +38,6 @@ for i: Int in 1..2 {
     print_str("-----------------");
 }
 
-print(x); // 1
-print(y); // 2
-print(z); // 3
+print(x); // Result: 1
+print(y); // Result: 2
+print(z); // Result: 3

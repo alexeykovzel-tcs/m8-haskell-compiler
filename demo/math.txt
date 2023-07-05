@@ -1,4 +1,7 @@
-/* This is a basic math library. */
+/* 
+    This file is a basic math library with support for 
+    division, exponentiation, etc.
+*/
 
 // increments a value
 fun incr(a: Int) -> Int {
@@ -37,8 +40,8 @@ fun abs(a: Int) -> Int {
     return a >= 0 ? a : -a;
 }
 
-print(incr(11));        // 12
-print(pow(2, 5));       // 32
-print(div(61, 3));      // 20
-print(mod(61, 3));      // 1
-print(abs(-5));         // 5
+print(incr(11));        // result: 12
+print(pow(2, 5));       // result: 32
+print(div(61, 3));      // result: 20
+print(mod(61, 3));      // result: 1
+print(abs(-5));         // result: 5
