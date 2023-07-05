@@ -211,7 +211,14 @@ data DataType
     | BoolType
     | IntType
     | ArrType DataType ArrSize
-    deriving (Show, Eq)
+    deriving Eq
+
+instance Show DataType where
+    show CharType = "Char"
+    show StrType = "String"
+    show BoolType = "Bool"
+    show IntType = "Int"
+    show (ArrType dataType _) = "[" ++ show dataType ++ "]"
 
 dataType :: Parser DataType
 dataType = foldl ArrType <$> baseType <*> arrDecl

@@ -38,11 +38,11 @@ data TypeChecker
     deriving Show
 
 data Error 
-    = InvalidType   VarDef    -- applying operation to an invalid type
-    | DupDecl       VarName    -- duplicate entity declaration
-    | MissingDecl   VarName    -- calling non-existent entity
-    | NotAssigned   VarName    -- using variable without value
-    | NoReturn      VarDef    -- function decl. without return
+    = InvalidType   VarDef DataType     -- applying operation to an invalid type
+    | DupDecl       VarName             -- duplicate entity declaration
+    | MissingDecl   VarName             -- calling non-existent entity
+    | NotAssigned   VarName             -- using variable without value
+    | NoReturn      VarDef              -- function decl. without return
     deriving Show
 
 getArrayType :: DataType -> DataType
@@ -97,24 +97,16 @@ checkAction (Var varName) typeChecker =
                     Just (varName, dataType)  -> (dataType, typeChecker)
 checkAction expr typeChecker =
                 case (expr) of
-                    (Both left right)   -> checkBoolOp left right typeChecker
-                    (OneOf left right)  -> checkBoolOp left right typeChecker
+                    (Both left right)   -> checkTypeOp BoolType left right typeChecker
+                    (OneOf left right)  -> checkTypeOp BoolType left right typeChecker
                     (Eq left right)     -> checkOp left right typeChecker
                     (MoreEq left right) -> checkOp left right typeChecker
                     (LessEq left right) -> checkOp left right typeChecker
                     (More left right)   -> checkOp left right typeChecker
                     (Less left right)   -> checkOp left right typeChecker
-                    (Add left right)    -> checkIntOp left right typeChecker
-                    (Sub left right)    -> checkIntOp left right typeChecker
-                    (Mult left right)   -> checkIntOp left right typeChecker
-
-checkIntOp :: Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
-checkIntOp left right typeChecker = 
-                case (leftDataType == rightDataType && leftDataType == IntType) of
-                    False -> (IntType, rightTypeChecker)
-                    True  -> (IntType, rightTypeChecker)
-                where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
-                      (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
+                    (Add left right)    -> checkTypeOp IntType left right typeChecker
+                    (Sub left right)    -> checkTypeOp IntType left right typeChecker
+                    (Mult left right)   -> checkTypeOp IntType left right typeChecker
 
 checkOp :: Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
 checkOp left right typeChecker = 
@@ -124,11 +116,11 @@ checkOp left right typeChecker =
                 where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
                       (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
 
-checkBoolOp :: Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
-checkBoolOp left right typeChecker = 
-                case (leftDataType == rightDataType && leftDataType == BoolType) of
-                    False -> (BoolType, rightTypeChecker)
-                    True  -> (BoolType, rightTypeChecker)
+checkTypeOp :: DataType -> Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
+checkTypeOp dataType left right typeChecker = 
+                case (leftDataType == rightDataType && leftDataType == dataType) of
+                    False -> (dataType, rightTypeChecker)
+                    True  -> (dataType, rightTypeChecker)
                 where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
                       (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
 
@@ -136,14 +128,14 @@ checkBoolOp left right typeChecker =
 checkVarDecl :: VarDef -> Maybe Expr -> TypeChecker -> TypeChecker
 checkVarDecl (varName, dataType) Nothing typeChecker = addVar (varName, dataType) typeChecker
 checkVarDecl (varName, dataType) (Just expr) typeChecker
-                | (dataType /= exprDataType) = addError (InvalidType (varName, dataType)) typeChecker
+                | (dataType /= exprDataType) = addError (InvalidType (varName, dataType) exprDataType) typeChecker
                 | otherwise                  = addVar (varName, dataType) exprTypeChecker
                 where (exprDataType, exprTypeChecker) = checkAction expr typeChecker
 
 checkVarAssign :: VarName -> Expr -> TypeChecker -> TypeChecker
 checkVarAssign varName expr typeChecker
                 | isJust (findVar varName typeChecker) == False = addError (MissingDecl varName) typeChecker
-                | (dataType /= exprDataType)                    = addError (InvalidType (varName, dataType)) typeChecker
+                | (dataType /= exprDataType)                    = addError (InvalidType (varName, dataType) exprDataType) typeChecker
                 | otherwise                                     = exprTypeChecker
                 where (_, dataType)                   = fromJust $ findVar varName typeChecker 
                       (exprDataType, exprTypeChecker) = checkAction expr typeChecker
@@ -151,7 +143,7 @@ checkVarAssign varName expr typeChecker
 checkArrInsert :: VarName -> Integer -> Expr -> TypeChecker -> TypeChecker
 checkArrInsert varName index expr typeChecker
                 | isJust (findVar varName typeChecker) == False = addError (MissingDecl varName) typeChecker
-                | (getArrayType dataType /= exprDataType) = addError (InvalidType (varName, dataType)) typeChecker
+                | (getArrayType dataType /= exprDataType) = addError (InvalidType (varName, dataType) exprDataType) typeChecker
                 | otherwise = exprTypeChecker
                 where (_, dataType) = fromJust $ findVar varName typeChecker
                       (exprDataType, exprTypeChecker) = checkAction expr typeChecker
@@ -159,9 +151,9 @@ checkArrInsert varName index expr typeChecker
 checkForLoop :: VarDef -> LoopIter -> Script -> TypeChecker -> TypeChecker
 checkForLoop varType@(_, IntType) (IterRange left right) script typeChecker = scriptTypeChecker
                 where varDefTypeChecker = addVar varType $ incScope typeChecker
-                      (_, iterRangeTypeChecker) = checkIntOp left right varDefTypeChecker
+                      (_, iterRangeTypeChecker) = checkTypeOp IntType left right varDefTypeChecker
                       scriptTypeChecker = check script iterRangeTypeChecker
-checkForLoop varType _ _ typeChecker = addError (InvalidType varType) typeChecker
+checkForLoop varType _ _ typeChecker = addError (InvalidType varType IntType) typeChecker
 
 checkWhileLoop :: Expr -> Script -> TypeChecker -> TypeChecker
 checkWhileLoop expr script typeChecker
@@ -199,8 +191,8 @@ elaborate script = check script initTypeChecker
 -- Generates error message with multiple errors found
 generateErrorMessages :: TypeChecker -> String
 generateErrorMessages (TypeChecker [] _) = []
-generateErrorMessages (TypeChecker ((InvalidType (varName, dataType)):xs) context) 
-                = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("InvalidType Error: " ++ show varName ++ " is type of " ++ show dataType ++ " but given " ++ "CHANGE")
+generateErrorMessages (TypeChecker ((InvalidType (varName, dataType) exprDataType):xs) context) 
+                = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("InvalidType Error: " ++ show varName ++ " is type of " ++ show dataType ++ " but given " ++ show exprDataType)
 generateErrorMessages (TypeChecker ((DupDecl varName):xs) context) 
                 = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("DupDecl Error: " ++ show varName ++ " is already exists in the current scope ")
 generateErrorMessages (TypeChecker ((MissingDecl varName):xs) context) 
@@ -213,7 +205,7 @@ generateErrorMessages (TypeChecker ((NotAssigned varName):xs) context)
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let x: Int = 0; let x: Int = 5; { z = 5; let x: Bool = true; }"
+steasy = tryParse script "let a: Bool[5]; a[1] = true;"
 
 initTypeChecker :: TypeChecker
 initTypeChecker = TypeChecker [] $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty
