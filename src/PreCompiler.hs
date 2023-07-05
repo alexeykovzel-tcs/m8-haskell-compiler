@@ -131,7 +131,6 @@ allocStmt stmt ctx = case stmt of
             ifCtx       = allocScript ifScript nextCtx
             elseId      = currId ifCtx + 1
             elsePath    = Map.insert nextId elseId $ path ifCtx
--- trace ("TEST") 
 
     FunDef name args returnType script -> allocScript actRecord funCtx
         where 

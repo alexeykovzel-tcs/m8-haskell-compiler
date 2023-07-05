@@ -14,16 +14,17 @@ languageDef = emptyDef {
         "==", ">=", "<=", ">", "<",     -- comparand operators
         "+", "-",                       -- term operators
         "*", "/", "%",                  -- factor operators
-        ":", "?"
+        ":", "?"                        -- ternary operators
     ],
     Token.reservedNames   = [ 
-        "let", "struct", "fun", "for", "while", "if", "return",
-        "Int", "String", "Char", "Bool", "false", "true"
+        "let", "fun", "for", "while", "if", "return",
+        "Int", "Char", "Bool", 
+        "false", "true"
     ],
     Token.commentStart = "/*",
     Token.commentEnd   = "*/",
     Token.commentLine  = "//",
-    Token.identStart   = letter <|> char '_',
+    Token.identStart   = letter,
     Token.identLetter  = alphaNum <|> char '_'
 }
 

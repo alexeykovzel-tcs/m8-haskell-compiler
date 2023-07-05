@@ -22,11 +22,13 @@ compile code = initArp ++ progASM ++ [EndProg]
 -- script compilation
 -----------------------------------------------------------------------------
 
+-- compiles a script into the SpriL language
 compileScript :: Context -> Script -> [Instruction]
 compileScript ctx [] = []
 compileScript ctx (x:xs) = (compileStmt ctx x) 
     ++ (compileScript (toPeerCtx ctx x) xs)
 
+-- updates context for the next scope
 toPeerCtx :: Context -> Statement -> Context
 toPeerCtx ctx stmt = case stmt of
     InScope _               -> nextPeer ctx
@@ -36,17 +38,25 @@ toPeerCtx ctx stmt = case stmt of
     Condition _ _ (Just _)  -> nextPeer $ nextPeer ctx
     stmt                    -> ctx
 
+-- compiles a statement into the SpriL language
 compileStmt :: Context -> Statement -> [Instruction]
 compileStmt ctx stmt = case stmt of
 
+    -- updates a variable value
     VarDecl (name, _) Nothing      -> []
     VarDecl (name, _) (Just expr)  -> updateVar ctx name expr
     VarAssign name expr            -> updateVar ctx name expr
     ArrInsert name idx expr        -> updateVarAtIdx ctx name idx expr
 
-    InScope script   -> childScope ctx script
-    Action expr      -> compileVoidExpr ctx expr
+    -- puts instructions into a new scope
+    InScope script -> childScope ctx script
 
+    -- executes expression without saving the result
+    Action expr ->
+        let (reg2, ctx2) = occupyReg ctx 
+        in compileExpr ctx2 expr reg2 
+
+    -- compiles a function definition
     FunDef name args returnType script 
         -> funAddr ++ jumpOver block ++ block
         where
@@ -55,23 +65,27 @@ compileStmt ctx stmt = case stmt of
             body    = compileScript ctxScp script
             block   = body ++ prepReturn ctxScp
 
+    -- saves the function result
     ReturnVal expr 
         -> compileExpr ctx2 expr reg2
         ++ putVar ctx2 "_rtn_val" reg2
-        -- ++ prepReturn ctx
+        ++ prepReturn ctx -- TODO: Think about it...
         where 
             (reg2, ctx2) = occupyReg ctx
 
+    -- compiles a "while" loop
     WhileLoop expr script -> cond ++ body
         where
             cond      = skipCond ctx expr body
             body      = childScope ctx script ++ jumpBack [body, cond]
 
+    -- compiles an if condition
     Condition expr ifScript Nothing -> cond ++ ifBody
         where
             cond      = skipCond ctx expr ifBody
             ifBody    = childScope ctx ifScript
 
+    -- compiles an if/else condition
     Condition expr ifScript (Just elseScript) 
         -> cond ++ ifBody ++ elseBody
         where
@@ -79,6 +93,7 @@ compileStmt ctx stmt = case stmt of
             ifBody    = childScope ctx ifScript ++ jumpOver elseBody
             elseBody  = putInScope ctx $ compileScript (peerCtx ctx) elseScript
 
+-- handles a function return
 prepReturn :: Context -> [Instruction]
 prepReturn ctx = returnAddr ++ callerArp ++ [Jump $ Ind reg2]
     where 
@@ -94,9 +109,14 @@ childScope ctx = putInScope ctx . compileScript (childCtx ctx)
 -- expression compilation
 -----------------------------------------------------------------------------
 
+-- compiles an expression into the SpriL language
 compileExpr :: Context -> Expr -> RegAddr -> [Instruction]
 compileExpr ctx expr reg = case expr of
 
+    Var name  -> loadVar ctx name reg
+    Fixed val -> [loadImm (intVal val) reg]
+
+    -- compiles a binary operation
     Parser.Add e1 e2 -> compileBin ctx e1 e2 reg Sprockell.Add
     Parser.Sub e1 e2 -> compileBin ctx e1 e2 reg Sprockell.Sub
 
@@ -109,13 +129,14 @@ compileExpr ctx expr reg = case expr of
     Both    e1 e2 -> compileBin ctx e1 e2 reg And
     OneOf   e1 e2 -> compileBin ctx e1 e2 reg Or
 
-    Var name  -> loadVar ctx name reg
-    Fixed val -> [loadImm (intVal val) reg]
-    Neg expr  -> compileExpr ctx expr reg 
-              ++ [Compute Sprockell.Sub reg0 reg reg]
+    -- executes an expression and reverts its sign
+    Neg expr -> compileExpr ctx expr reg 
+        ++ [Compute Sprockell.Sub reg0 reg reg]
 
+    -- loads an element from an array
     ArrAccess name idx -> loadVarAtIdx ctx name reg idx
 
+    -- compiles a ternary operator
     Ternary expr1 expr2 expr3
         -> cond ++ ifBody ++ elseBody
         where
@@ -123,37 +144,41 @@ compileExpr ctx expr reg = case expr of
             ifBody    = compileExpr ctx expr2 reg ++ jumpOver elseBody
             elseBody  = compileExpr ctx expr3 reg
 
+    -- stores the current Sprockell id to a variable
     FunCall "set_process_id" [Var name]
         -> putVar ctx name regSprID
  
+    -- prints a string directly
     FunCall "print_str" [Fixed msg]
         -> printStrLn ctx (show msg)
 
+    -- prints a string from a variable
     FunCall "print_str" [Var name]
         -> applyArr ctx name (\reg -> [WriteInstr reg charIO])
         ++ printChar reg '\n'
 
+    -- prints the result of an expression
     FunCall "print" [expr]
         -> compileExpr ctx expr reg 
         ++ [WriteInstr reg numberIO] 
 
     FunCall name args
-        -- get the function's address
+        -- get function's address
         -> loadVar ctx ("_f_" ++ name) reg
-        -- get the function's ARP based on its depth
+        -- get function's ARP based on its depth
         ++ loadArp ctx2 (depth - funDepth) reg2
         ++ putVar ctx2 "_arp" reg2
         ++ [copyReg regArp reg2]
-        -- set the function's context (incl. ARP)
+        -- set function's context (incl. ARP)
         ++ setNextArp ctx2
-        -- save the caller's ARP 
+        -- save caller's ARP 
         ++ putVar funCtx "_link" reg2
-        -- save the caller's arguments
+        -- save caller's arguments
         ++ updateVars funCtx argNames args
-        -- save the return address
+        -- save return address
         ++ putPC funCtx "_rtn_addr"
         ++ [Jump $ Ind reg]
-        -- retrieve the return value
+        -- retrieve return value
         ++ loadAI ctx regArp size reg
         where 
             (reg2, ctx2)      = occupyReg ctx
@@ -173,18 +198,18 @@ intVal (Bool val)   = intBool val
 intVal (Char val)   = toInteger $ ord val
 intVal val = error $ "failed translating value: " ++ show val
 
--- updates multiple variables from expressions
+-- updates multiple variables in memory
 updateVars :: Context -> [VarName] -> [Expr] -> [Instruction]
 updateVars _ [] [] = []
 updateVars ctx (name:xs) (expr:ys) 
     =  updateVar ctx name expr
     ++ updateVars ctx xs ys
 
--- updates a variable from expression
+-- updates a variable in memory
 updateVar :: Context -> VarName -> Expr -> [Instruction]
 updateVar ctx name expr = updateVarAtIdx ctx name 0 expr
 
--- saves the expression result in a variable at a given index
+-- updates a variable in memory at the given index
 updateVarAtIdx :: Context -> VarName -> Integer -> Expr -> [Instruction]
 updateVarAtIdx ctx name idx expr = case expr of
     Fixed (Arr vals)    -> putArrImm ctx name (intVal <$> vals) 
@@ -194,7 +219,7 @@ updateVarAtIdx ctx name idx expr = case expr of
         exprToReg       = compileExpr ctx2 expr reg2
         varToMem        = putVarAtIdx ctx2 name reg2 idx
 
--- compiles a skip condition from an expression
+-- compiles a "skip" condition from an expression
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 
 skipCond ctx expr body = let (reg2, ctx2) = occupyReg ctx in
        compileExpr ctx2 expr reg2
@@ -209,9 +234,3 @@ compileBin ctx e1 e2 reg op = let reg2 = findReg ctx
     ++ compileExpr ctx e2 reg
     ++ [Pop reg2]
     ++ [Compute op reg2 reg reg]
-
--- compiles an expression, which result is ignored
-compileVoidExpr :: Context -> Expr -> [Instruction]
-compileVoidExpr ctx expr = 
-    let (reg2, ctx2) = occupyReg ctx 
-    in compileExpr ctx2 expr reg2 
