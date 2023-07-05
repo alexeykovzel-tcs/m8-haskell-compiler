@@ -186,7 +186,6 @@ checkVarDecl (varName, dataType) (Just expr) typeChecker
 checkVarAssign :: VarName -> Expr -> TypeChecker -> TypeChecker
 checkVarAssign varName expr typeChecker
     | isJust (findVar varName typeChecker) == False = addError (MissingDecl varName) typeChecker
-    | hasValue == False = addError (NotAssigned varName) typeChecker
     | (dataType /= exprDataType)                    = addError (InvalidType (newVarName, dataType, hasValue) exprDataType) typeChecker
     | otherwise                                     = exprTypeChecker
     where   (newVarName, dataType, hasValue)    = fromJust $ findVar varName typeChecker 
@@ -253,6 +252,6 @@ elaborate script
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = parseWith script "let x: Int = 0; let y: Int = 0; y + 5;"
+steasy = parseWith script "let x: Int = 0; let y: Int; y + 5;"
 
 debug = error $ show $ tryElaborate steasy
