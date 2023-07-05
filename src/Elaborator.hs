@@ -111,7 +111,7 @@ checkAction expr typeChecker =
 checkOp :: Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
 checkOp left right typeChecker = 
                 case (leftDataType == rightDataType) of
-                    False -> (BoolType, rightTypeChecker)
+                    False -> error $ "\nInvalidType Error: different types used in operation: " ++ show leftDataType ++ " and " ++ show rightDataType
                     True  -> (BoolType, rightTypeChecker)
                 where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
                       (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
@@ -119,7 +119,7 @@ checkOp left right typeChecker =
 checkTypeOp :: DataType -> Expr -> Expr -> TypeChecker -> (DataType, TypeChecker)
 checkTypeOp dataType left right typeChecker = 
                 case (leftDataType == rightDataType && leftDataType == dataType) of
-                    False -> (dataType, rightTypeChecker)
+                    False -> error $ "\nInvalidType Error: different types used in operation: " ++ show leftDataType ++ " and " ++ show rightDataType
                     True  -> (dataType, rightTypeChecker)
                 where (leftDataType, leftTypeChecker)   = checkAction left typeChecker
                       (rightDataType, rightTypeChecker)  = checkAction right leftTypeChecker
@@ -205,7 +205,7 @@ generateErrorMessages (TypeChecker ((NotAssigned varName):xs) context)
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let a: Bool[5]; a[1] = true;"
+steasy = tryParse script "let x: Bool = 5 && true;"
 
 initTypeChecker :: TypeChecker
 initTypeChecker = TypeChecker [] $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty
