@@ -21,7 +21,7 @@ type ScopeID    = Integer
 type ScopePath  = Map ScopeID ScopeID
 type ScopeMap   = Map ScopeID (VarMap, Depth, Size)
 
-type FunMap     = Map FunName (ScopeID, Depth)
+type FunMap     = Map FunName (ScopeID, Depth, [VarName])
 
 data Context = Ctx {
     scopeId    :: ScopeID,
@@ -52,7 +52,9 @@ occupyReg ctx = (r, ctx {freeRegs = rs})
 
 -- finds a free register
 findReg :: Context -> RegAddr
-findReg ctx = let (r:_) = freeRegs ctx in r
+findReg ctx = case freeRegs ctx of
+    []      -> error "no registers left :/"
+    (r:_)   -> r
 
 -- copies value from register 1 to register 2
 copyReg :: RegAddr -> RegAddr -> Instruction
@@ -220,7 +222,8 @@ getVar ctx name =
     let (varMap, _, _) = getScope ctx
     in case Map.lookup name varMap of
         Just var  -> var
-        Nothing   -> error $ "no such var: " ++ name ++ " " ++ (show $ scopeId ctx)
+        Nothing   -> error $ "no such var: " ++ name 
+                    ++ " " ++ (show $ scopeId ctx)
 
 -- gets current scope information
 getScope :: Context -> (VarMap, Depth, Size)
@@ -255,4 +258,6 @@ nextPeer :: Context -> Context
 nextPeer ctx = ctx { peerId = updatePeer ctx $ peerId ctx }
 
 updatePeer :: Context -> ScopeID -> ScopeID
-updatePeer ctx id = fromJust $ Map.lookup id (scopePath ctx)
+updatePeer ctx id = case Map.lookup id (scopePath ctx) of
+    Just peerId -> peerId
+    Nothing -> error $ "no such path: " ++ show id

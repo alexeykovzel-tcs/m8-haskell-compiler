@@ -1,15 +1,30 @@
-let a: Int = 0;
-let b: Int = 1;
-let c: Int;
+// fun fib(n: Int) -> Int {
+//     let a: Int = 0;
+//     let b: Int = 1;
+//     let c: Int;
+// 
+//     while n >= 2 {
+//         c = a + b;
+//         a = b;
+//         b = c;
+//         n = n - 1;
+//     }
+//     return b;
+// }
 
-// fibonacci number
-let n: Int = 10;
+// fun fib_rec(n: Int) -> Int {
+//     if n <= 1 { 
+//         return n;
+//     }
+//     return fib_rec(n - 1) + fib_rec(n - 2);
+// }
 
-while n >= 2 {
-    c = a + b;
-    a = b;
-    b = c;
-    n = n - 1;
+fun ex_rec(n: Int) -> Int {
+    if n == 0 {
+        return 7;
+    } else {
+        return ex_rec(n - 1);
+    }
 }
 
-print(b);
+// print(ex_rec(10));

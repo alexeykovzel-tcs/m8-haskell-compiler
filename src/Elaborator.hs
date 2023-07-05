@@ -79,7 +79,6 @@ getType :: Value -> DataType
 getType (Bool _) = BoolType
 getType (Char _) = CharType
 getType (Int _) = IntType
-getType (Arr [Char _]) = StrType
 
 -- Traverses the expression inside a statement
 checkAction :: Expr -> TypeChecker -> (DataType, TypeChecker)
@@ -194,7 +193,7 @@ elaborate script = check script initTypeChecker
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = tryParse script "let x: Bool = true;"
+steasy = parseWith script "let x: Bool = true;"
 
 initTypeChecker :: TypeChecker
 initTypeChecker = Right $ Context (((0,0), (-1,0)), (Map.insert (0,0) (-1,0) Map.empty)) Map.empty

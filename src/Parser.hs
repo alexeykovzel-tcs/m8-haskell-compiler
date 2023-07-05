@@ -9,15 +9,16 @@ import Lexer
 -- parser usage
 -----------------------------------------------------------------------------
 
--- tryParse statement    "let x: Int = 2 + 1";
--- tryParse statement    "for i: Int in [1, 2, 3] { print(i); }"
--- tryParse expr         "2 * (3 + 4) / 6"
+-- parseWith script    "let x: Int = 2 + 1";
+-- parseWith script    "for i: Int in [1, 2, 3] { print(i); }"
+-- parseWith expr      "2 * (3 + 4) / 6"
 
-tryParse :: Parser a -> String -> a
-tryParse p xs = either (error . show) id $ parse p "" xs
+-- parses a string with the given parser
+parseWith :: Parser a -> String -> a
+parseWith p xs = either (error . show) id $ parse p "" xs
 
 -----------------------------------------------------------------------------
--- statement parsers
+-- statement parsing
 -----------------------------------------------------------------------------
 
 type FunName = String
@@ -46,15 +47,15 @@ script :: Parser Script
 script = whiteSpace *> many statement
 
 statement :: Parser Statement
-statement = 
+statement =   
         varDecl         -- e.g. let x: Int;
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
-    <|> inScope
-    <|> funDef          -- e.g. fun increment(x: Int) -> Int { }
-    <|> forLoop         -- e.g. for x: Int in 2..10 { }
-    <|> whileLoop       -- e.g. while x < 3 { print(x); }
-    <|> condition       -- e.g. if x < y { } else { }
+    <|> inScope         -- e.g. { ... }
+    <|> funDef          -- e.g. fun incr(x: Int) -> Int { ... }
+    <|> forLoop         -- e.g. for x: Int in 2..10 { ... }
+    <|> whileLoop       -- e.g. while x < 3 { ... }
+    <|> condition       -- e.g. if x < y { ... } else { ... }
     <|> returnVal       -- e.g. return x;
     <|> action          -- e.g. print(x);
 
@@ -78,7 +79,8 @@ arrInsert = ArrInsert
     <*  semi
 
 inScope :: Parser Statement
-inScope = InScope <$> braces script
+inScope = InScope 
+    <$> braces script
 
 funDef :: Parser Statement
 funDef = FunDef
@@ -94,7 +96,8 @@ forLoop = ForLoop
     <*> braces script
 
 loopIter :: Parser LoopIter
-loopIter = IterRange <$> expr <* symbol ".." <*> expr
+loopIter = IterRange 
+    <$> expr <* symbol ".." <*> expr
 
 whileLoop :: Parser Statement
 whileLoop = WhileLoop
@@ -113,16 +116,16 @@ returnVal = ReturnVal
     <*  semi
 
 action :: Parser Statement
-action = Action <$> expr <*  semi
+action = Action 
+    <$> expr <* semi
 
 -----------------------------------------------------------------------------
--- expression parsers
+-- expression parsing
 -----------------------------------------------------------------------------
 
 data Expr
     = FunCall       FunName [Expr]
     | Ternary       Expr Expr Expr
-    | Lambda        ArgsDef Script
     | ArrAccess     VarName Integer
     | Both          Expr Expr
     | OneOf         Expr Expr
@@ -134,12 +137,13 @@ data Expr
     | Add           Expr Expr
     | Sub           Expr Expr
     | Mult          Expr Expr
+    | Neg           Expr
     | Var           VarName
     | Fixed         Value
     deriving Show
 
 expr :: Parser Expr
-expr =  try ternary
+expr =  try ternary 
     <|> operation
     <?> "expression"
 
@@ -176,28 +180,28 @@ term = factor `chainl1` op
 
 -- factor * factor / factor
 factor :: Parser Expr
-factor = Parser.Fixed <$> value
-    <|> try lambda          -- e.g. (x: Int) -> { ... }
-    <|> parens expr         -- e.g. (2 + 3)
-    <|> try funCall         -- e.g. print("Hello")
-    <|> try arrAccess
-    <|> Var <$> name
+factor = negation
+    <|> fixedValue
+    <|> parens expr     -- e.g. (2 + 3) * 4
+    <|> try funCall     -- e.g. print("foo")
+    <|> try arrAccess   -- e.g. arr[2]
+    <|> Var <$> name    -- variable 
 
-arrAccess :: Parser Expr
-arrAccess = ArrAccess
-    <$> name
-    <*> brackets integer
+negation :: Parser Expr
+negation = Neg 
+    <$ reservedOp "-" <*> operation
 
-lambda :: Parser Expr
-lambda = Lambda 
-    <$> parens argsDef 
-    <*  symbol "->" 
-    <*> braces script
+fixedValue :: Parser Expr
+fixedValue = Parser.Fixed 
+    <$> value 
 
 funCall :: Parser Expr
 funCall = FunCall 
-    <$> name 
-    <*> parens args
+    <$> name <*> parens args
+    
+arrAccess :: Parser Expr
+arrAccess = ArrAccess 
+    <$> name <*> brackets integer
 
 -----------------------------------------------------------------------------
 -- data type parsers
@@ -207,7 +211,6 @@ type ArrSize = Integer
 
 data DataType
     = CharType
-    | StrType
     | BoolType
     | IntType
     | ArrType DataType ArrSize
@@ -218,24 +221,23 @@ dataType = foldl ArrType <$> baseType <*> arrDecl
     where arrDecl = many $ brackets $ integer 
 
 baseType :: Parser DataType
-baseType = CharType   <$ reserved "Char"
-       <|> BoolType   <$ reserved "Bool"
-       <|> IntType    <$ reserved "Int"
+baseType = 
+        CharType   <$ reserved "Char"
+    <|> BoolType   <$ reserved "Bool"
+    <|> IntType    <$ reserved "Int"
 
 -----------------------------------------------------------------------------
 -- value parsers
 -----------------------------------------------------------------------------
 
 data Value
-    = Bool      Bool 
-    | Char      Char
-    | Int       Integer
-    | Arr       [Value]
-    | None
+    = Bool   Bool 
+    | Char   Char
+    | Int    Integer
+    | Arr    [Value]
     deriving (Eq)
 
 instance Show Value where
-    show None           = "none"
     show (Bool False)   = "false"
     show (Bool True)    = "true"
     show (Char val)     = show val
@@ -262,7 +264,6 @@ value = Int   <$> integer
     <|> Arr   <$> text
     <|> Arr   <$> array
     <|> Bool  <$> boolean
-    <|> None  <$  reserved "none"
 
 text :: Parser [Value]
 text = between (char '"') (char '"') (many (Char <$> textChar))
@@ -301,36 +302,36 @@ instance QC.Arbitrary Expr where
         where
             expr 0 = Parser.Fixed <$> QC.arbitrary
             expr n = let nextExpr = expr (n `div` 2) in QC.oneof [
-                FunCall <$> QC.arbitrary <*> QC.resize (n `div` 2) QC.arbitrary,
-                Lambda  <$> QC.arbitrary <*> QC.arbitrary,
-                Ternary <$> nextExpr <*> nextExpr <*> nextExpr,
-                Both    <$> nextExpr <*> nextExpr,
-                OneOf   <$> nextExpr <*> nextExpr,
-                Eq      <$> nextExpr <*> nextExpr,
-                MoreEq  <$> nextExpr <*> nextExpr,
-                LessEq  <$> nextExpr <*> nextExpr,
-                More    <$> nextExpr <*> nextExpr,
-                Less    <$> nextExpr <*> nextExpr,
-                Add     <$> nextExpr <*> nextExpr,
-                Sub     <$> nextExpr <*> nextExpr,
-                Mult    <$> nextExpr <*> nextExpr,
-                Var     <$> QC.arbitrary,
-                Parser.Fixed <$> QC.arbitrary ]
+                    FunCall <$> QC.arbitrary <*> QC.resize (n `div` 2) QC.arbitrary,
+                    Ternary <$> nextExpr <*> nextExpr <*> nextExpr,
+                    Both    <$> nextExpr <*> nextExpr,
+                    OneOf   <$> nextExpr <*> nextExpr,
+                    Eq      <$> nextExpr <*> nextExpr,
+                    MoreEq  <$> nextExpr <*> nextExpr,
+                    LessEq  <$> nextExpr <*> nextExpr,
+                    More    <$> nextExpr <*> nextExpr,
+                    Less    <$> nextExpr <*> nextExpr,
+                    Add     <$> nextExpr <*> nextExpr,
+                    Sub     <$> nextExpr <*> nextExpr,
+                    Mult    <$> nextExpr <*> nextExpr,
+                    Var     <$> QC.arbitrary,
+                    Parser.Fixed <$> QC.arbitrary 
+                ]
 
 instance QC.Arbitrary DataType where
     arbitrary = QC.oneof [
-        pure StrType,
-        pure BoolType,
-        pure IntType,
-        ArrType <$> QC.arbitrary <*> QC.arbitrary ]
+            pure BoolType,
+            pure IntType,
+            ArrType <$> QC.arbitrary <*> QC.arbitrary 
+        ]
 
 instance QC.Arbitrary Value where
     arbitrary = QC.oneof [
-        Char <$> QC.arbitrary,
-        Bool <$> QC.arbitrary,
-        Int  <$> QC.arbitrary,
-        Arr  <$> QC.arbitrary,
-        pure None ]
+            Char <$> QC.arbitrary,
+            Bool <$> QC.arbitrary,
+            Int  <$> QC.arbitrary,
+            Arr  <$> QC.arbitrary
+        ]
 
 instance QC.Arbitrary LoopIter where
     arbitrary = QC.oneof [ IterRange <$> QC.arbitrary <*> QC.arbitrary ]

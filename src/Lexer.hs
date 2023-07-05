@@ -13,11 +13,12 @@ languageDef = emptyDef {
         "&&", "||",                     -- logicand operators
         "==", ">=", "<=", ">", "<",     -- comparand operators
         "+", "-",                       -- term operators
-        "*", "/", "%"                   -- factor operators
+        "*", "/", "%",                  -- factor operators
+        ":", "?"
     ],
     Token.reservedNames   = [ 
         "let", "struct", "fun", "for", "while", "if", "return",
-        "Int", "String", "Char", "Bool", "none", "false", "true"
+        "Int", "String", "Char", "Bool", "false", "true"
     ],
     Token.commentStart = "/*",
     Token.commentEnd   = "*/",

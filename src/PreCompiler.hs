@@ -1,9 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module PreCompiler (initCtx, precompile) where
+module PreCompiler (initCtx, precompile, postScript) where
 
 import Parser
-import PostParser
 import SprockellExt
 import Debug.Trace
 import Control.Monad (join)
@@ -12,11 +11,47 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 initCtx :: Script -> Context
-initCtx prog = Ctx 0 1 (funs ctx) (scopes ctx) hardPath userRegs
+initCtx prog = Ctx 0 1 (funs ctx) (scopes ctx) (path ctx) userRegs
+    where ctx = findScopes prog
+
+-----------------------------------------------------------------------------
+-- post parser
+-----------------------------------------------------------------------------
+
+postScript :: Script -> Script
+postScript [] = []
+postScript (x:xs) = postStmt x ++ postScript xs
+
+postStmt :: Statement -> Script
+postStmt (WhileLoop cond body)  = [WhileLoop cond (postScript body)]
+postStmt (InScope body)         = [InScope (postScript body)]
+
+postStmt (Condition cond ifBody elseBody) = 
+    [Condition cond (postScript ifBody) postElse]
     where 
-        ctx = findScopes prog
-        -- hardPath = Map.fromList [(1, 2), (2, 3)]
-        hardPath = path ctx
+        postElse = case elseBody of
+            Just body   -> Just $ postScript body
+            Nothing     -> Nothing
+
+-- add variable for code address to the function
+postStmt (FunDef name args returnType body) = [
+        VarDecl ("_f_" ++ name, IntType) Nothing,
+        FunDef name args returnType (postScript body) 
+    ]
+
+-- change "for" loop to "while" as it's easier to compile
+postStmt (ForLoop i@(name, _) (IterRange from to) body) = [
+    InScope [
+        VarDecl i (Just $ from),
+        VarDecl ("_to", IntType) (Just $ to),
+        WhileLoop whileCond whileBody 
+    ]]
+    where 
+        incrI     = VarAssign name $ Add (Var name) (Fixed $ Int 1)
+        whileCond = LessEq (Var name) (Var "_to")
+        whileBody = (postScript body ++ [incrI]) 
+
+postStmt stmt = [stmt]
 
 -----------------------------------------------------------------------------
 -- scope information
@@ -71,17 +106,12 @@ allocSubScopes (x:xs) ctx =
         path     = newPath,
         funs     = funs newCtx
     } where
+        id       = currId ctx
+        newId    = currId newCtx
         newCtx   = allocStmt x ctx
-        newPath  = updatePath ctx newCtx        -- <---- IMPLEMENT THIS
-
--- updatePath :: Statement -> ScopeCtx -> ScopeCtx -> ScopePath
--- updatePath stmt oldCtx ctx = case stmt of 
---     InScope _               -> Map.insert path
---     WhileLoop _ _           ->  
---     Condition _ _ Nothing   ->
---     Condition _ _ (Just _)  ->
---     FunDef _ _ _ _          ->  
---     _                       -> path
+        newPath
+            | id == newId || length xs == 0 = path newCtx
+            | otherwise = Map.insert (id + 1) (newId + 1) $ path newCtx
 
 -- allocates statement variables
 allocStmt :: Statement -> ScopeCtx -> ScopeCtx 
@@ -101,11 +131,13 @@ allocStmt stmt ctx = case stmt of
             ifCtx       = allocScript ifScript nextCtx
             elseId      = currId ifCtx + 1
             elsePath    = Map.insert nextId elseId $ path ifCtx
+-- trace ("TEST") 
 
     FunDef name args returnType script -> allocScript actRecord funCtx
         where 
-            actRecord  = buildAR script args returnType
-            funCtx     = updateFuns nextCtx name (nextId, depth ctx - 1)
+            actRecord   = buildAR script args returnType
+            argNames    = fst <$> args
+            funCtx      = updateFuns nextCtx name (nextId, depth ctx - 1, argNames)
 
     _ -> ctx
 
@@ -113,7 +145,7 @@ allocStmt stmt ctx = case stmt of
         nextId  = currId ctx + 1 
         nextCtx = ctx { currId = nextId }
 
-updateFuns :: ScopeCtx -> FunName -> (ScopeID, Depth) -> ScopeCtx
+updateFuns :: ScopeCtx -> FunName -> (ScopeID, Depth, [VarName]) -> ScopeCtx
 updateFuns ctx name entry = ctx { funs = Map.insert name entry $ funs ctx }
 
 -- calculates scope size based on its variable allocation
@@ -124,9 +156,16 @@ scopeSize ((_, (_, size)):xs) = size + scopeSize xs
 -- builds a function activation record
 buildAR :: Script -> [VarDef] -> Maybe DataType -> Script
 buildAR script args returnType
-    = intVar "_rtn"
-    : intVar "_sl"
-    : script
+    = intVar "_rtn_val"
+    : intVar "_rtn_addr"
+    : intVar "_link"
+    : declVars args
+    ++ script
+
+-- declares variables based on definitions
+declVars :: [VarDef] -> Script
+declVars [] = []
+declVars (x:xs) = VarDecl x Nothing : declVars xs
 
 -- adds ARP variable at the end of the script
 addArp :: Script -> Script
@@ -165,7 +204,7 @@ precompile file = do
     printScopes scopeList
     putStrLn $ show scopePath ++ "\n"
     where
-        prog      = postScript <$> tryParse script <$> readFile file
+        prog      = postScript <$> parseWith script <$> readFile file
         scopeCtx  = findScopes <$> prog
 
 printScopes :: [(ScopeID, (VarMap, Depth, Size))] -> IO()

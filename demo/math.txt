@@ -1,0 +1,44 @@
+/* This is a basic math library. */
+
+// increments a value
+fun incr(a: Int) -> Int {
+    return a + 1;
+}
+
+// calculates a quotient after division 
+fun div(a: Int, b: Int) -> Int {
+    let k: Int = 0;
+    while a > b {
+        a = a - b;
+        k = k + 1;
+    }
+    return k;
+}
+
+// calculates a remainder after division
+fun mod(a: Int, b: Int) -> Int {
+    while a > b {
+        a = a - b;
+    }
+    return a;
+}
+
+// raises a value to the given power
+fun pow(a: Int, b: Int) -> Int {
+    let k: Int = 1;
+    for i: Int in 1..b {
+        k = k * a;
+    }
+    return k;
+}
+
+// retrieves the absolute value
+fun abs(a: Int) -> Int {
+    return a >= 0 ? a : -a;
+}
+
+print(incr(11));        // 12
+print(pow(2, 5));       // 32
+print(div(61, 3));      // 20
+print(mod(61, 3));      // 1
+print(abs(-5));         // 5
