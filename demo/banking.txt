@@ -1,1 +1,16 @@
-// TODO: banking system
+global bank_account: Int = 0;
+
+parallel 4 {
+    for i: Int in 1..100 {
+        
+        // lock(bank_account);
+        
+        bank_account = bank_account + 10;
+
+        // unlock(bank_account);
+    
+    }
+}
+
+print(bank_account);
+print_str("exiting the program...");

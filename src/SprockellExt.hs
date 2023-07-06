@@ -25,14 +25,94 @@ type ScopeMap   = Map ScopeID (VarMap, Depth, Size)
 type FunMap     = Map FunName (ScopeID, Depth, [VarName])
 
 data Context = Ctx {
-    scopeId     :: ScopeID,
-    peerId      :: ScopeID,
-    funMap      :: FunMap,
-    glVars      :: GlVarMap, 
-    scopeMap    :: ScopeMap,
-    scopePath   :: ScopePath,
-    freeRegs    :: [RegAddr]
+    scopeId      :: ScopeID,
+    peerId       :: ScopeID,
+    funMap       :: FunMap,
+    glVars       :: GlVarMap, 
+    scopeMap     :: ScopeMap,
+    scopePath    :: ScopePath,
+    freeRegs     :: [RegAddr],
+    freeWorkers  :: [MemAddr]
 }
+
+startProg :: [Instruction]
+startProg = initArp ++ initProcs
+
+endProg :: Context -> [Instruction]
+endProg ctx = endProcs ctx ++ [EndProg]
+
+-----------------------------------------------------------------------------
+-- process management
+-----------------------------------------------------------------------------
+
+startWorkers :: Context -> Integer -> ([Instruction], [MemAddr], Context)
+startWorkers ctx 0 = 
+startWorkers ctx num = 
+    ([
+        loadImm (3 * num) reg,
+        Compute Add regPC reg reg,
+        WriteInstr reg (DirAddr addr)
+    ]
+    ++ next, addr : workers, ctx3)
+    where 
+        (next, workers, ctx3) = startWorkers ctx2 (num - 1) 
+        (addr, ctx2) = occupyWorker ctx
+        reg = findReg ctx
+
+joinWorkers :: Context -> [MemAddr] -> [Instruction] 
+joinWorkers ctx (addr:xs) = 
+    [
+        ReadInstr (DirAddr addr),
+        Receive reg,
+        Compute NEq reg0 reg reg,
+        Branch reg (Rel $ -3)
+    ]
+    ++ joinWorkers ctx xs
+    where 
+        reg = findReg ctx
+
+occupyWorkers :: Context -> Integer -> [MemAddr]
+occupyWorkers _ 0 = []
+occupyWorkers ctx num = worker : occupyWorkers ctx2 (num - 1)
+    where (worker, ctx2) = occupyWorker ctx
+
+occupyWorker :: Context -> (MemAddr, Context)
+occupyWorker ctx = (w, ctx {freeWorkers = ws})
+    where (w:ws) = freeWorkers ctx
+
+initProcs :: [Instruction]
+initProcs = [
+        -- skip busy wait if the main process
+        Compute Equal reg0 regSprID regB,
+        Branch regB (Rel $ length busyWait + 1)
+    ]
+    ++ busyWait
+    where 
+        busyWait = [
+            -- reset assigned address
+            WriteInstr reg0 (IndAddr regSprID),
+
+            -- busy wait for sub processes
+            ReadInstr (IndAddr regSprID),
+            Receive regB,
+
+            -- handle termination signal
+            Compute GtE regB reg0 regC,
+            Branch regC (Rel 2),
+            EndProg,
+
+            -- handle assigned address
+            Compute Equal regB reg0 regC,
+            Branch regC (Rel 2),
+            Jump (Ind regB),
+
+            -- jump to busy wait
+            Jump $ Abs 4 ]
+
+endProcs :: Context -> [Instruction]
+endProcs ctx = let reg = findReg ctx in 
+      Load (ImmValue $ -1) reg
+    : (WriteInstr reg <$> DirAddr <$> freeWorkers ctx)
 
 -----------------------------------------------------------------------------
 -- register management

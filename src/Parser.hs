@@ -35,6 +35,7 @@ data Statement
     | ForLoop       VarDef LoopIter Script
     | WhileLoop     Expr Script
     | Condition     Expr Script (Maybe Script)
+    | Parallel      Integer Script
     | InScope       Script
     | ReturnVal     Expr
     | Action        Expr
@@ -58,6 +59,7 @@ statement =
     <|> forLoop         -- e.g. for x: Int in 2..10 { ... }
     <|> whileLoop       -- e.g. while x < 3 { ... }
     <|> condition       -- e.g. if x < y { ... } else { ... }
+    <|> parallel        -- e.g. parallel 4 { ... }
     <|> returnVal       -- e.g. return x;
     <|> action          -- e.g. print(x);
 
@@ -127,6 +129,13 @@ condition = Condition
     <$  reserved "if" <*> expr 
     <*> braces script
     <*> nullable (reserved "else" *> braces script)
+
+-- parses a parallel execution
+parallel :: Parser Statement
+parallel = Parallel
+    <$  reserved "parallel" 
+    <*> integer
+    <*> braces script
 
 -- parses a return value
 returnVal :: Parser Statement

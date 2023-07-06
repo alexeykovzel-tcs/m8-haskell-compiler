@@ -11,6 +11,9 @@ import Data.Maybe
 import Data.Char (ord)
 import qualified Data.Map as Map
 
+compile :: String -> [Instruction]
+compile code = compileAST $ parseWith script code
+
 compileRun :: String -> FunName -> [Integer] -> [Instruction]
 compileRun code funName args = compileAST $ ast 
     ++ [Action $ FunCall "print" [FunCall funName funArgs]]
@@ -18,15 +21,12 @@ compileRun code funName args = compileAST $ ast
         ast      = parseWith script code
         funArgs  = Fixed <$> Int <$> args
 
-compile :: String -> [Instruction]
-compile code = compileAST $ parseWith script code
-
--- compiles a program AST into the SpriL language
 compileAST :: Script -> [Instruction]
-compileAST ast = initArp ++ progASM ++ [EndProg]
+compileAST ast = startProg ++ prog ++ endProg ctx
     where
-        prog     = postScript $ ast
-        progASM  = compileScript (initCtx prog) prog
+        ctx      = initCtx script
+        script   = postScript $ ast
+        prog     = compileScript ctx script
 
 -----------------------------------------------------------------------------
 -- script compilation
@@ -52,17 +52,34 @@ toPeerCtx ctx stmt = case stmt of
 compileStmt :: Context -> Statement -> [Instruction]
 compileStmt ctx stmt = case stmt of
 
-    -- updates a variable
-    GlVarDecl (name, _) Nothing      -> [] 
-    GlVarDecl (name, _) (Just expr)  -> updateGlVar ctx name expr
-    VarDecl (name, _) Nothing        -> []
-    VarDecl (name, _) (Just expr)    -> updateVar ctx name expr
-    ArrInsert name idx expr          -> updateVarAtIdx ctx name idx expr
-
+    -- compiles variable declaration
+    GlVarDecl (name, _) expr   -> maybe [] (updateGlVar ctx name) expr
+    VarDecl (name, _) expr     -> maybe [] (updateVar ctx name) expr
+    
+    -- compiles variable assignment
     VarAssign name expr -> 
         if    Map.member name (glVars ctx)
         then  updateGlVar ctx name expr
         else  updateVar ctx name expr
+
+-----------------------------------------------------------------------------
+
+    -- compile parallel execution
+    Parallel num script 
+        -> workers
+        ++ skipIfMain
+        ++ body
+        ++ [Jump $ Abs 3] -- jump to busy wait
+        ++ joinWorkers ctx workers
+        where
+            body = [WriteInstr reg0 numberIO]
+            skipIfMain = [Jump (Rel $ length body + 2)]
+            (workers, ctx2) = startWorkers ctx num
+
+-----------------------------------------------------------------------------
+
+    -- compiles array insertion
+    ArrInsert name idx expr -> updateVarAtIdx ctx name idx expr
 
     -- puts instructions into a new scope
     InScope script -> childScope ctx script
