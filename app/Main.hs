@@ -1,7 +1,7 @@
 module Main where
 
 import Sprockell
-import Compiler (compile, compileRun)
+import Compiler
 import System.Directory (doesFileExist)
 import System.Environment (getArgs)
 import Control.Monad (join)
@@ -52,5 +52,5 @@ handleLine line = do
 
 runFun :: FilePath -> String -> [Integer] -> IO() 
 runFun file name args = join 
-    $ (\code -> run [compileRun code name args]) 
-    <$> readFile file 
+    $ (\code -> run [compileFunCall code name args]) 
+    <$> readFile file

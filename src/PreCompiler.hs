@@ -38,9 +38,15 @@ instance WorkerCounter Script where
 
 instance WorkerCounter Statement where
     countWorkers (Parallel num script) 
-        = num * (max 1 $ countWorkers script)
+        = num + num * countWorkers script
 
     countWorkers _ = 0
+
+testWorkerCounter :: FilePath -> IO()
+testWorkerCounter file = do
+    code <- readFile file
+    let prog = parseWith script code
+    putStrLn $ show $ countWorkers prog
 
 -----------------------------------------------------------------------------
 -- post parser
