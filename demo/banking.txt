@@ -1,1 +1,9 @@
-// TODO: banking system
+global bank_account: Int = 0;
+
+parallel 6 {
+    for i: Int in 1..100 {
+        bank_account = bank_account + 1;
+    }
+}
+
+print(bank_account);

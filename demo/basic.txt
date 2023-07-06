@@ -15,7 +15,7 @@ let v3: Bool = true;
 /*      functions      */
 /* ------------------- */
 
-fun sayHello() {
+fun say_hello() {
     print_str("Hello");
 }
 
@@ -24,8 +24,8 @@ fun decr(n: Int) {
 }
 
 let ten: Int = decr(11);
-print(ten);  // result: 10
-sayHello();  // prints "Hello"
+print(ten);   // result: 10
+say_hello();  // prints "Hello"
 
 /* ------------------- */
 /*        arrays       */
@@ -59,7 +59,7 @@ print(sum); // result: -5
 /* ------------------- */
 
 if sum == -5 {
-    print_str("Success!");
+    print_str("success!");
 } else {
-    print_str("Fail...");
+    print_str("fail...");
 }
