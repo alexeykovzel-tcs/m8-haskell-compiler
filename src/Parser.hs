@@ -28,6 +28,7 @@ type Script = [Statement]
 
 data Statement
     = VarDecl       VarDef (Maybe Expr)
+    | GlVarDecl     VarDef (Maybe Expr)
     | VarAssign     VarName Expr
     | ArrInsert     VarName Integer Expr
     | FunDef        FunName ArgsDef (Maybe DataType) Script
@@ -49,6 +50,7 @@ script = whiteSpace *> many statement
 statement :: Parser Statement
 statement =   
         varDecl         -- e.g. let x: Int;
+    <|> glVarDecl
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
     <|> inScope         -- e.g. { ... }
@@ -63,6 +65,13 @@ statement =
 varDecl :: Parser Statement
 varDecl = VarDecl
     <$  reserved "let" <*> varDef
+    <*> nullable (symbol "=" *> expr)
+    <*  semi
+
+-- parses a global variable declaration
+glVarDecl :: Parser Statement
+glVarDecl = GlVarDecl
+    <$  reserved "global" <*> varDef
     <*> nullable (symbol "=" *> expr)
     <*  semi
 
@@ -339,62 +348,3 @@ args = expr `sepBy` comma
 -- maybe parses (on failure returns Nothing)
 nullable :: Parser a -> Parser (Maybe a)
 nullable p = Just <$> p <|> pure Nothing
-
------------------------------------------------------------------------------
--- script generator
------------------------------------------------------------------------------
-
-instance QC.Arbitrary Statement where
-    arbitrary = QC.oneof [
-            VarDecl     <$> QC.arbitrary <*> QC.arbitrary,
-            VarAssign   <$> QC.arbitrary <*> QC.arbitrary,
-            ArrInsert   <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-            FunDef      <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-            ForLoop     <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-            WhileLoop   <$> QC.arbitrary <*> QC.arbitrary,
-            Condition   <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-            ReturnVal   <$> QC.arbitrary,
-            Action      <$> QC.arbitrary 
-        ]
-
-instance QC.Arbitrary Expr where
-    arbitrary = QC.sized expr
-        where
-            expr 0 = Parser.Fixed <$> QC.arbitrary
-            expr n = let nextExpr = expr (n `div` 2) in QC.oneof [
-                    FunCall <$> QC.arbitrary <*> QC.resize (n `div` 2) QC.arbitrary,
-                    Ternary <$> nextExpr <*> nextExpr <*> nextExpr,
-                    Both    <$> nextExpr <*> nextExpr,
-                    OneOf   <$> nextExpr <*> nextExpr,
-                    Eq      <$> nextExpr <*> nextExpr,
-                    MoreEq  <$> nextExpr <*> nextExpr,
-                    LessEq  <$> nextExpr <*> nextExpr,
-                    More    <$> nextExpr <*> nextExpr,
-                    Less    <$> nextExpr <*> nextExpr,
-                    Add     <$> nextExpr <*> nextExpr,
-                    Sub     <$> nextExpr <*> nextExpr,
-                    Mult    <$> nextExpr <*> nextExpr,
-                    Var     <$> QC.arbitrary,
-                    Parser.Fixed <$> QC.arbitrary 
-                ]
-
-instance QC.Arbitrary DataType where
-    arbitrary = QC.oneof [
-            pure BoolType,
-            pure IntType,
-            ArrType <$> QC.arbitrary <*> QC.arbitrary 
-        ]
-
-instance QC.Arbitrary Value where
-    arbitrary = QC.oneof [
-            Char <$> QC.arbitrary,
-            Bool <$> QC.arbitrary,
-            Int  <$> QC.arbitrary,
-            Arr  <$> QC.arbitrary
-        ]
-
-instance QC.Arbitrary LoopIter where
-    arbitrary = QC.oneof [ IterRange <$> QC.arbitrary <*> QC.arbitrary ]
-
-autoScript :: IO Script
-autoScript = QC.generate (QC.resize 3 QC.arbitrary)

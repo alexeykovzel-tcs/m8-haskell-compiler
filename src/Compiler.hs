@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Compiler (compile, precompile) where
+module Compiler (compileRun, compile) where
 
 import Sprockell
 import SprockellExt
@@ -11,12 +11,22 @@ import Data.Maybe
 import Data.Char (ord)
 import qualified Data.Map as Map
 
--- compiles a string into the SpriL language
+compileRun :: String -> FunName -> [Integer] -> [Instruction]
+compileRun code funName args = compileAST $ ast 
+    ++ [Action $ FunCall "print" [FunCall funName funArgs]]
+    where 
+        ast      = parseWith script code
+        funArgs  = Fixed <$> Int <$> args
+
 compile :: String -> [Instruction]
-compile code = initArp ++ progASM ++ [EndProg]
+compile code = compileAST $ parseWith script code
+
+-- compiles a program AST into the SpriL language
+compileAST :: Script -> [Instruction]
+compileAST ast = initArp ++ progASM ++ [EndProg]
     where
-        prog            = postScript $ parseWith script code
-        progASM         = compileScript (initCtx prog) prog
+        prog     = postScript $ ast
+        progASM  = compileScript (initCtx prog) prog
 
 -----------------------------------------------------------------------------
 -- script compilation
@@ -42,11 +52,17 @@ toPeerCtx ctx stmt = case stmt of
 compileStmt :: Context -> Statement -> [Instruction]
 compileStmt ctx stmt = case stmt of
 
-    -- updates a variable value
-    VarDecl (name, _) Nothing      -> []
-    VarDecl (name, _) (Just expr)  -> updateVar ctx name expr
-    VarAssign name expr            -> updateVar ctx name expr
-    ArrInsert name idx expr        -> updateVarAtIdx ctx name idx expr
+    -- updates a variable
+    GlVarDecl (name, _) Nothing      -> [] 
+    GlVarDecl (name, _) (Just expr)  -> updateGlVar ctx name expr
+    VarDecl (name, _) Nothing        -> []
+    VarDecl (name, _) (Just expr)    -> updateVar ctx name expr
+    ArrInsert name idx expr          -> updateVarAtIdx ctx name idx expr
+
+    VarAssign name expr -> 
+        if    Map.member name (glVars ctx)
+        then  updateGlVar ctx name expr
+        else  updateVar ctx name expr
 
     -- puts instructions into a new scope
     InScope script -> childScope ctx script
@@ -54,7 +70,7 @@ compileStmt ctx stmt = case stmt of
     -- executes expression without saving the result
     Action expr ->
         let (reg2, ctx2) = occupyReg ctx 
-        in compileExpr ctx2 expr reg2 
+        in  compileExpr ctx2 expr reg2 
 
     -- compiles a function definition
     FunDef name args returnType script 
@@ -69,7 +85,7 @@ compileStmt ctx stmt = case stmt of
     ReturnVal expr 
         -> compileExpr ctx2 expr reg2
         ++ putVar ctx2 "_rtn_val" reg2
-        ++ prepReturn ctx -- TODO: Think about it...
+        ++ prepReturn ctx
         where 
             (reg2, ctx2) = occupyReg ctx
 
@@ -91,7 +107,7 @@ compileStmt ctx stmt = case stmt of
         where
             cond      = skipCond ctx expr ifBody
             ifBody    = childScope ctx ifScript ++ jumpOver elseBody
-            elseBody  = putInScope ctx $ compileScript (peerCtx ctx) elseScript
+            elseBody  = peerScope ctx elseScript
 
 -- handles a function return
 prepReturn :: Context -> [Instruction]
@@ -105,6 +121,10 @@ prepReturn ctx = returnAddr ++ callerArp ++ [Jump $ Ind reg2]
 childScope :: Context -> Script -> [Instruction]
 childScope ctx = putInScope ctx . compileScript (childCtx ctx)
 
+-- puts a script in the peer context
+peerScope :: Context -> Script -> [Instruction]
+peerScope ctx = putInScope ctx . compileScript (peerCtx ctx)
+
 -----------------------------------------------------------------------------
 -- expression compilation
 -----------------------------------------------------------------------------
@@ -113,8 +133,11 @@ childScope ctx = putInScope ctx . compileScript (childCtx ctx)
 compileExpr :: Context -> Expr -> RegAddr -> [Instruction]
 compileExpr ctx expr reg = case expr of
 
-    Var name  -> loadVar ctx name reg
     Fixed val -> [loadImm (intVal val) reg]
+
+    Var name -> case Map.lookup name (glVars ctx) of
+        Just (addr, size)  -> [ReadInstr (DirAddr addr), Receive reg]
+        Nothing            -> loadVar ctx name reg
 
     -- compiles a binary operation
     Parser.Add e1 e2 -> compileBin ctx e1 e2 reg Sprockell.Add
@@ -163,8 +186,10 @@ compileExpr ctx expr reg = case expr of
         ++ [WriteInstr reg numberIO] 
 
     FunCall name args
+        -- eval arguments and put them on the stack
+        -> evalArgs ctx reg args
         -- get function's address
-        -> loadVar ctx ("_f_" ++ name) reg
+        ++ loadVar ctx ("_f_" ++ name) reg
         -- get function's ARP based on its depth
         ++ loadArp ctx2 (depth - funDepth) reg2
         ++ putVar ctx2 "_arp" reg2
@@ -173,8 +198,8 @@ compileExpr ctx expr reg = case expr of
         ++ setNextArp ctx2
         -- save caller's ARP 
         ++ putVar funCtx "_link" reg2
-        -- save caller's arguments
-        ++ updateVars funCtx argNames args
+        -- save caller's arguments from the stack
+        ++ saveArgs funCtx (reverse argNames)
         -- save return address
         ++ putPC funCtx "_rtn_addr"
         ++ [Jump $ Ind reg]
@@ -187,6 +212,31 @@ compileExpr ctx expr reg = case expr of
             (scopeId, funDepth, argNames) 
                 = fromJust $ Map.lookup name (funMap ctx)
 
+-- compiles a binary operation
+compileBin :: Context -> Expr -> Expr -> RegAddr -> Operator -> [Instruction]
+compileBin ctx e1 e2 reg op = let reg2 = findReg ctx
+    in compileExpr ctx e1 reg
+    ++ [Push reg]
+    ++ compileExpr ctx e2 reg
+    ++ [Pop reg2]
+    ++ [Compute op reg2 reg reg]
+
+-- evaluates function arguments and puts them onto the stack
+evalArgs :: Context -> RegAddr -> [Expr] -> [Instruction]
+evalArgs ctx reg [] = []
+evalArgs ctx reg (expr:xs) = 
+    compileExpr ctx expr reg 
+    ++ [Push reg] 
+    ++ evalArgs ctx reg xs
+
+-- saves function arguments in memory
+saveArgs :: Context -> [VarName] -> [Instruction]
+saveArgs _ [] = []
+saveArgs ctx (name:xs) = [Pop reg2] 
+    ++ putVar ctx2 name reg2 
+    ++ saveArgs ctx xs
+    where (reg2, ctx2) = occupyReg ctx
+
 -----------------------------------------------------------------------------
 -- helper functions
 -----------------------------------------------------------------------------
@@ -198,16 +248,14 @@ intVal (Bool val)   = intBool val
 intVal (Char val)   = toInteger $ ord val
 intVal val = error $ "failed translating value: " ++ show val
 
--- updates multiple variables in memory
-updateVars :: Context -> [VarName] -> [Expr] -> [Instruction]
-updateVars _ [] [] = []
-updateVars ctx (name:xs) (expr:ys) 
-    =  updateVar ctx name expr
-    ++ updateVars ctx xs ys
-
--- updates a variable in memory
-updateVar :: Context -> VarName -> Expr -> [Instruction]
-updateVar ctx name expr = updateVarAtIdx ctx name 0 expr
+-- updates a variable in shared memory
+updateGlVar :: Context -> VarName -> Expr -> [Instruction] 
+updateGlVar ctx name expr = 
+    compileExpr ctx2 expr reg2
+    ++ [WriteInstr reg2 (DirAddr addr)]
+    where 
+        (addr, size) = fromJust $ Map.lookup name $ glVars ctx 
+        (reg2, ctx2) = occupyReg ctx
 
 -- updates a variable in memory at the given index
 updateVarAtIdx :: Context -> VarName -> Integer -> Expr -> [Instruction]
@@ -219,18 +267,13 @@ updateVarAtIdx ctx name idx expr = case expr of
         exprToReg       = compileExpr ctx2 expr reg2
         varToMem        = putVarAtIdx ctx2 name reg2 idx
 
+-- updates a variable in memory
+updateVar :: Context -> VarName -> Expr -> [Instruction]
+updateVar ctx name expr = updateVarAtIdx ctx name 0 expr
+
 -- compiles a "skip" condition from an expression
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 
 skipCond ctx expr body = let (reg2, ctx2) = occupyReg ctx in
        compileExpr ctx2 expr reg2
     ++ [Compute Equal reg2 reg0 reg2]
     ++ branchOver reg2 body
-
--- compiles a binary operation
-compileBin :: Context -> Expr -> Expr -> RegAddr -> Operator -> [Instruction]
-compileBin ctx e1 e2 reg op = let reg2 = findReg ctx
-    in compileExpr ctx e1 reg
-    ++ [Push reg]
-    ++ compileExpr ctx e2 reg
-    ++ [Pop reg2]
-    ++ [Compute op reg2 reg reg]

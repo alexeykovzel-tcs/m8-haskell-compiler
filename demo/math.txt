@@ -1,4 +1,7 @@
-/* This is a basic math library. */
+/* 
+    This file contains basic mathematical operations with support 
+    for division, exponentiation, etc.
+*/
 
 // increments a value
 fun incr(a: Int) -> Int {
@@ -7,8 +10,12 @@ fun incr(a: Int) -> Int {
 
 // calculates a quotient after division 
 fun div(a: Int, b: Int) -> Int {
+    if b <= 0 {
+        print_str("error: invalid dividend");
+        return -1;
+    }
     let k: Int = 0;
-    while a > b {
+    while a >= b {
         a = a - b;
         k = k + 1;
     }
@@ -17,7 +24,11 @@ fun div(a: Int, b: Int) -> Int {
 
 // calculates a remainder after division
 fun mod(a: Int, b: Int) -> Int {
-    while a > b {
+    if b <= 0 {
+        print_str("error: invalid dividend");
+        return -1;
+    }
+    while a >= b {
         a = a - b;
     }
     return a;
@@ -25,6 +36,10 @@ fun mod(a: Int, b: Int) -> Int {
 
 // raises a value to the given power
 fun pow(a: Int, b: Int) -> Int {
+    if b < 0 {
+        print_str("error: power shouldn't be negative");
+        return -1;
+    }
     let k: Int = 1;
     for i: Int in 1..b {
         k = k * a;
@@ -36,9 +51,3 @@ fun pow(a: Int, b: Int) -> Int {
 fun abs(a: Int) -> Int {
     return a >= 0 ? a : -a;
 }
-
-print(incr(11));        // 12
-print(pow(2, 5));       // 32
-print(div(61, 3));      // 20
-print(mod(61, 3));      // 1
-print(abs(-5));         // 5

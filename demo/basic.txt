@@ -1,5 +1,65 @@
-if true {
+/*
+    This file demonstrates the basic functionality of the compiler
+    with support for variables, loops, etc.
+*/
 
+/* ------------------- */
+/*      variables      */
+/* ------------------- */
+
+let v1: Int = 4;
+let v2: Char = 'a';
+let v3: Bool = true;
+
+/* ------------------- */
+/*      functions      */
+/* ------------------- */
+
+fun sayHello() {
+    print_str("Hello");
+}
+
+fun decr(n: Int) {
+    return n - 1;
+}
+
+let ten: Int = decr(11);
+print(ten);  // result: 10
+sayHello();  // prints "Hello"
+
+/* ------------------- */
+/*        arrays       */
+/* ------------------- */
+
+let arr1: Int[4] = [1, 2, 3, 4];
+let arr2: Char[3] = "foo";
+
+print_str(arr2); // prints "foo"
+
+/* ------------------- */
+/*        loops        */
+/* ------------------- */
+
+let sum: Int = 0;
+
+for i: Int in 1..10 {
+    sum = sum + i;    
+}
+
+print(sum); // result: 55
+
+while sum > 0 {
+    sum = sum - 10;
+}
+
+print(sum); // result: -5
+
+/* ------------------- */
+/*      conditions     */
+/* ------------------- */
+
+if sum == -5 {
+    print_str("Success!");
 } else {
-    
+    print_str("Fail...");
 }
