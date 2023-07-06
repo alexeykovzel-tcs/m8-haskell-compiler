@@ -14,7 +14,9 @@ import qualified Data.Map as Map
 
 -- compiles string into the SpriL language
 compile :: String -> [Instruction]
-compile code = initArp ++ progASM ++ [EndProg]
+compile code 
+    | threadCount == 0 =  initArp ++ progASM ++ [EndProg]
+    | otherwise     = initArp ++ (Branch regSprID)
     where
         prog     = postParse $ tryParse script code
         progASM  = compileScript (initCtx prog) prog
@@ -64,6 +66,8 @@ compileStmt ctx stmt = case stmt of
             cond      = skipCond ctx expr ifBody
             ifBody    = simpleScope ctx ifScript ++ jumpOver elseBody
             elseBody  = elseScope ctx elseScript
+    -- Fork name script -> compileFork ctx name script
+    -- Join name -> compileJoin x ctx
 
 -- sets context scope for a script
 simpleScope :: Context -> Script -> [Instruction]
@@ -119,15 +123,6 @@ compileExpr ctx expr reg = case expr of
             cond      = skipCond ctx expr1 ifBody
             ifBody    = compileExpr ctx expr2 reg ++ jumpOver elseBody
             elseBody  = compileExpr ctx expr3 reg
-
-    FunCall "set_thread_id" [Var name]
-        -> putVar ctx name regSprID
-
-    FunCall "thread_create" [Fixed (Int threadId)]
-        -> printStrLn ctx ("create thread: " ++ show threadId)
-
-    FunCall "thread_join" [Fixed (Int threadId)]
-        -> printStrLn ctx ("join thread: " ++ show threadId)
  
     FunCall "print_str" [Fixed msg]
         -> printStrLn ctx (show msg)
@@ -179,3 +174,19 @@ compileBin ctx e1 e2 reg op =
         (reg2, ctx2) = occupyReg ctx
         c1 = compileExpr ctx  e1 reg
         c2 = compileExpr ctx2 e2 reg2
+
+
+-- Count the maximum number of concurrent threads
+maxConcurrentThreads :: Script -> Int
+maxConcurrentThreads = count 0 0
+  where
+    count maxThreads currentThreads [] = maxThreads
+    count maxThreads currentThreads (stmt:stmts)
+      | isFork stmt = count (max maxThreads (currentThreads + 1)) (currentThreads + 1) stmts
+      | isJoin stmt = count maxThreads (currentThreads - 1) stmts
+      | otherwise   = count maxThreads currentThreads stmts
+
+    isFork (Fork _ _) = True
+    isFork _          = False
+    isJoin (Join _)   = True
+    isJoin _          = False
