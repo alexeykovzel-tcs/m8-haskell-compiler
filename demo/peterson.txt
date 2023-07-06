@@ -1,6 +1,6 @@
-global turn: Int;
 global flag1: Bool = false;
 global flag2: Bool = false;
+global turn: Int;
 
 let pid: Int;
 set_process_id(pid);

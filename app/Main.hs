@@ -5,6 +5,7 @@ import Compiler (compile, compileRun)
 import System.Directory (doesFileExist)
 import System.Environment (getArgs)
 import Control.Monad (join)
+import Runner
 
 {- 
     You can either pass a file path as an argument, in which case the
@@ -26,11 +27,6 @@ main = do
     case args of
         [filePath]  -> runFile filePath
         []          -> runModules
-
-runFile :: FilePath -> IO()
-runFile file = do
-    code <- readFile file
-    run [compile code]
 
 runModules :: IO()
 runModules = do

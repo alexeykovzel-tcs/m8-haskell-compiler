@@ -18,7 +18,7 @@ languageDef = emptyDef {
     ],
     Token.reservedNames   = [ 
         "let", "global", "for", "while", "if",
-        "fun", "return",
+        "fun", "return", "parallel",
         "Int", "Char", "Bool", 
         "false", "true"
     ],

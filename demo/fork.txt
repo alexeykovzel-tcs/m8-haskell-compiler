@@ -1,9 +1,0 @@
-let pid: Int;
-set_process_id(pid);
-
-if (pid != 0) {
-    while true {
-    }
-}
-
-let x

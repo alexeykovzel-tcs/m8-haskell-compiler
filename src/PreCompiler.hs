@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module PreCompiler (initCtx, postScript) where
+module PreCompiler (initCtx, postScript, countWorkers) where
 
 import Parser
 import SprockellExt
@@ -11,17 +11,36 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 -- initial context for compilation
-initCtx :: Script -> Context
-initCtx prog = let scopeCtx = studyScopes prog 
+initCtx :: Script -> Int -> Context
+initCtx prog num = let scopeCtx = studyScopes prog
     in Ctx {
-        scopeId     = 0,
-        peerId      = 1,
-        funMap      = funs scopeCtx,
-        glVars      = findGlVars prog,
-        scopeMap    = scopes scopeCtx,
-        scopePath   = path scopeCtx,
-        freeRegs    = userRegs
+        scopeId      = 0,
+        peerId       = 1,
+        funMap       = funs scopeCtx,
+        glVars       = findGlVars num prog,
+        scopeMap     = scopes scopeCtx,
+        scopePath    = path scopeCtx,
+        freeRegs     = userRegs,
+        freeWorkers  = [1..num]
     }
+
+-----------------------------------------------------------------------------
+-- counter for workers 
+-----------------------------------------------------------------------------
+
+class WorkerCounter a where
+    countWorkers :: a -> Integer
+
+instance WorkerCounter Script where
+    countWorkers [] = 0
+    countWorkers (x:xs) 
+        = max (countWorkers x) (countWorkers xs)
+
+instance WorkerCounter Statement where
+    countWorkers (Parallel num script) 
+        = num * (max 1 $ countWorkers script)
+
+    countWorkers _ = 0
 
 -----------------------------------------------------------------------------
 -- post parser
@@ -32,33 +51,34 @@ postScript [] = []
 postScript (x:xs) = postStmt x ++ postScript xs
 
 postStmt :: Statement -> Script
-postStmt (WhileLoop cond body)  = [WhileLoop cond (postScript body)]
-postStmt (InScope body)         = [InScope (postScript body)]
+postStmt (WhileLoop cond script)  = [WhileLoop cond $ postScript script]
+postStmt (Parallel num script)    = [Parallel num $ postScript script] 
+postStmt (InScope script)         = [InScope $ postScript script]
 
-postStmt (Condition cond ifBody elseBody) = 
-    [Condition cond (postScript ifBody) postElse]
+postStmt (Condition cond ifScript elseScript) = 
+    [Condition cond (postScript ifScript) postElse]
     where 
-        postElse = case elseBody of
-            Just body   -> Just $ postScript body
-            Nothing     -> Nothing
+        postElse = case elseScript of
+            Just script  -> Just $ postScript script
+            Nothing      -> Nothing
 
 -- add variable for code address to the function
-postStmt (FunDef name args returnType body) = [
+postStmt (FunDef name args returnType script) = [
         VarDecl ("_f_" ++ name, IntType) Nothing,
-        FunDef name args returnType (postScript body) 
+        FunDef name args returnType (postScript script) 
     ]
 
 -- change "for" loop to "while" as it's easier to compile
-postStmt (ForLoop i@(name, _) (IterRange from to) body) = [
+postStmt (ForLoop i@(name, _) (IterRange from to) script) = [
     InScope [
         VarDecl i (Just $ from),
         VarDecl ("_to", IntType) (Just $ to),
-        WhileLoop whileCond whileBody 
+        WhileLoop whileCond whileScript 
     ]]
     where 
-        incrI     = VarAssign name $ Add (Var name) (Fixed $ Int 1)
-        whileCond = LessEq (Var name) (Var "_to")
-        whileBody = (postScript body ++ [incrI]) 
+        incrI        = VarAssign name $ Add (Var name) (Fixed $ Int 1)
+        whileCond    = LessEq (Var name) (Var "_to")
+        whileScript  = (postScript script ++ [incrI]) 
 
 postStmt stmt = [stmt]
 
@@ -69,8 +89,8 @@ postStmt stmt = [stmt]
 type GlVarList  = [(VarName, (MemAddr, VarSize))]
 type MemAddr    = Int
 
-findGlVars :: Script -> GlVarMap
-findGlVars script = Map.fromList $ scriptGlVars 0 script
+findGlVars :: MemAddr -> Script -> GlVarMap
+findGlVars addr script = Map.fromList $ scriptGlVars addr script
 
 scriptGlVars :: MemAddr -> Script -> GlVarList
 scriptGlVars addr [] = []
@@ -88,7 +108,7 @@ stmtGlVars addr stmt = case stmt of
 testGlVars :: FilePath -> IO()
 testGlVars file = do
     code <- readFile file
-    putStrLn $ show $ findGlVars $ parseWith script code
+    putStrLn $ show $ findGlVars 5 $ parseWith script code
 
 -----------------------------------------------------------------------------
 -- stack scopes
@@ -155,6 +175,7 @@ allocStmt :: Statement -> ScopeCtx -> ScopeCtx
 allocStmt stmt ctx = case stmt of
     
     InScope script      -> allocScript script nextCtx
+    Parallel _ script   -> allocScript script nextCtx
     WhileLoop _ script  -> allocScript script nextCtx
 
     Condition _ ifScript Nothing -> allocScript ifScript nextCtx

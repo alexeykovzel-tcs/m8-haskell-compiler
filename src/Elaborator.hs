@@ -277,6 +277,10 @@ check ((GlVarDecl varType maybeExpr):xs) typeChecker
     = check xs $ checkGlVarDecl varType maybeExpr typeChecker
 check ((VarAssign varName expr):xs) typeChecker
     = check xs $ checkVarAssign varName expr typeChecker
+check ((GlVarDecl varType maybeExpr):xs) typeChecker 
+    = check xs $ checkGlVarDecl varType maybeExpr typeChecker
+check ((VarAssign varName expr):xs) typeChecker
+    = check xs $ checkVarAssign varName expr typeChecker
 check ((ArrInsert varName index expr):xs) typeChecker 
     = check xs $ checkArrInsert varName index expr typeChecker
 check ((FunDef funName argsDef maybeDataType script):xs) typeChecker 
