@@ -36,7 +36,7 @@ data Context = Ctx {
 }
 
 startProg :: [Instruction]
-startProg = initArp ++ initProcs
+startProg = initArp ++ initWorkers
 
 endProg :: Context -> [Instruction]
 endProg ctx = endProcs ctx ++ [EndProg]
@@ -47,17 +47,18 @@ endProg ctx = endProcs ctx ++ [EndProg]
 
 startWorkers :: Context -> [MemAddr] -> [Instruction]
 startWorkers ctx workers = let reg = findReg ctx in
-    concat $ reverse $ (\idx -> [
-        Load (ImmValue $ 3 * idx) reg,
-        Compute Add regPC reg reg,
-        WriteInstr reg (DirAddr $ workers !! (idx - 1))
-    ]) <$> [1..length workers]
+    concat $ reverse $ (\idx -> 
+        let addr = workers !! (idx - 1) in 
+        lockMem reg addr ++ [
+            Load (ImmValue $ 7 * idx) reg,
+            Compute Add regPC reg reg,
+            WriteInstr reg (DirAddr addr)
+        ]) <$> [1..length workers]
 
 joinWorkers :: Context -> [MemAddr] -> [Instruction] 
 joinWorkers ctx workers = let reg = findReg ctx in 
-    concat $ (\addr -> [
-        ReadInstr (DirAddr addr),
-        Receive reg,
+    concat $ (\addr -> 
+        readGlMem addr reg ++ [
         Compute NEq reg0 reg reg,
         Branch reg (Rel $ -3)
     ]) <$> workers
@@ -65,10 +66,10 @@ joinWorkers ctx workers = let reg = findReg ctx in
 occupyWorkers :: Context -> Int -> ([MemAddr], Context)
 occupyWorkers ctx num = 
     let workers = freeWorkers ctx
-    in (take num workers, ctx {freeWorkers = drop num workers})
+    in (take num workers, ctx { freeWorkers = drop num workers })
 
-initProcs :: [Instruction]
-initProcs = [
+initWorkers :: [Instruction]
+initWorkers = [
         -- skip busy wait if the main process
         Compute Equal reg0 regSprID regB,
         Branch regB (Rel $ length busyWait + 1)
@@ -88,9 +89,16 @@ initProcs = [
             Branch regC (Rel 2),
             EndProg,
 
-            -- handle assigned address
+            -- check if not assigned
             Compute Equal regB reg0 regC,
+            Branch regC (Rel 5),
+
+            -- check if reserved
+            Load (ImmValue 1) regC,
+            Compute Equal regB regC regC,
             Branch regC (Rel 2),
+
+            -- jump to the assigned address
             Jump (Ind regB),
 
             -- jump to busy wait
@@ -156,9 +164,26 @@ jumpVar :: Context -> VarName -> [Instruction]
 jumpVar ctx name = loadVar ctx2 name reg2 ++ [Jump $ Ind reg2]
     where (reg2, ctx2) = occupyReg ctx
 
+negateReg :: RegAddr -> [Instruction]
+negateReg reg = [Compute Sprockell.Sub reg0 reg reg]
+
 -----------------------------------------------------------------------------
 -- memory management
 -----------------------------------------------------------------------------
+
+readGlMem :: MemAddr -> RegAddr -> [Instruction]
+readGlMem addr reg = [ReadInstr (DirAddr addr), Receive reg]
+
+lockMem :: RegAddr -> MemAddr -> [Instruction]
+lockMem reg addr = [
+        TestAndSet (DirAddr addr), 
+        Receive reg, 
+        Compute Equal reg reg0 reg,
+        Branch reg (Rel $ -3) 
+    ]
+
+unlockMem :: MemAddr -> [Instruction]
+unlockMem addr = [WriteInstr reg0 (DirAddr addr)]
 
 -- increments a variable in memory
 incrMem :: Context -> VarName -> [Instruction]
@@ -193,6 +218,15 @@ storeAI ctx reg1 reg2 offset = let reg3 = findReg ctx
 -- IO instructions
 -----------------------------------------------------------------------------
 
+printVarStr :: Context -> VarName -> [Instruction] 
+printVarStr ctx name = let reg = findReg ctx in
+    applyArr ctx name (\reg -> [WriteInstr reg charIO])
+    ++ printChar reg '\n'
+
+-- prints a value from a register
+printReg :: RegAddr -> [Instruction]
+printReg reg = [WriteInstr reg numberIO]
+
 -- prints a string
 printStr :: Context -> String -> [Instruction]
 printStr ctx str = concat $ map (printChar $ findReg ctx) str
@@ -209,14 +243,21 @@ printChar reg c = [Load (ImmValue $ ord c) reg, WriteInstr reg charIO]
 -- variable management
 -----------------------------------------------------------------------------
 
+glVarAddr :: Context -> VarName -> MemAddr
+glVarAddr ctx name = addr
+    where (addr, _) = fromJust $ Map.lookup name (glVars ctx)
+
 -- loads a variable from memory to a register
 loadVar :: Context -> VarName -> RegAddr -> [Instruction]
 loadVar ctx name reg = loadVarAtIdx ctx name reg 0
 
 -- loads a variable from memory to a register at the given index
 loadVarAtIdx :: Context -> VarName -> RegAddr -> Integer -> [Instruction]
-loadVarAtIdx ctx name reg idx = applyVar ctx name 
-    $ \ctx regArp offset -> loadAI ctx regArp (offset + idx) reg
+loadVarAtIdx ctx name reg idx = case Map.lookup name (glVars ctx) of
+    Just (addr, _) -> readGlMem (addr + fromInteger idx) reg
+    Nothing -> applyVar ctx name 
+        $ \ctx regArp offset -> 
+            loadAI ctx regArp (offset + idx) reg
 
 -- update a variable from a register + value
 putVarAdd :: Context -> VarName -> RegAddr -> Integer -> [Instruction]

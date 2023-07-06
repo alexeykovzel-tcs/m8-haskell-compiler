@@ -1,9 +1,12 @@
-global bank_account: Int = 0;
+global account: Int = 0;
+global lock: Int;
 
-parallel 6 {
-    for i: Int in 1..100 {
-        bank_account = bank_account + 1;
+parallel 4 {
+    for i: Int in 1..1000 {
+        lock(lock);
+        account = account + 1;
+        unlock(lock);
     }
 }
 
-print(bank_account);
+print(account);
