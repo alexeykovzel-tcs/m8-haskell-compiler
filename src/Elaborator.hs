@@ -210,12 +210,13 @@ checkWhileLoop :: Expr -> Script -> TypeChecker -> TypeChecker
 checkWhileLoop expr script typeChecker  = check script $ incScope whileTypeChecker
     where (_, whileTypeChecker)         = checkAction expr typeChecker
 
+-- FIX: Check IF Expression
 checkCondition :: Expr -> Script -> Maybe Script -> TypeChecker -> TypeChecker
 checkCondition expr ifScript elseScript typeChecker 
     = case (elseScript) of
         Nothing     -> check ifScript $ incScope ifTypeChecker
         Just script -> check script $ incScope $ check ifScript (incScope ifTypeChecker)
-        where (_, ifTypeChecker) = checkAction expr typeChecker
+        where (ifType, ifTypeChecker) = checkAction expr typeChecker
 
 -- Checks the correctness of the written program
 check :: Script -> TypeChecker -> TypeChecker
@@ -223,8 +224,8 @@ check [] typeChecker
     = decScope typeChecker
 check ((VarDecl varType maybeExpr):xs) typeChecker 
     = check xs $ checkVarDecl varType maybeExpr typeChecker
-check ((VarAssign varName expr):xs) typeChecker = error "LOL"
-    -- = check xs $ checkVarAssign varName expr typeChecker
+check ((VarAssign varName expr):xs) typeChecker
+    = check xs $ checkVarAssign varName expr typeChecker
 check ((ArrInsert varName index expr):xs) typeChecker 
     = check xs $ checkArrInsert varName index expr typeChecker
 check ((ForLoop varType loopIter script):xs) typeChecker 
@@ -252,6 +253,6 @@ elaborate script
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = parseWith script "let x: Int = 0; let y: Int; y + 5;"
+steasy = parseWith script "let x: Bool = true; if x { } else { }"
 
 debug = error $ show $ tryElaborate steasy
