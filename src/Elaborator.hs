@@ -17,7 +17,6 @@ import qualified Data.Map as Map
 {-
 TODO:
 - Add tests
-- Check that var has value
 - Add support for functions
 -}
 
@@ -45,6 +44,7 @@ data Error
     | DupDecl       VarName             -- duplicate entity declaration
     | MissingDecl   VarName             -- calling non-existent entity
     | NotAssigned   VarName             -- using variable without value
+    | GlobalDecl    VarName             -- creating global variable not in the main scope
     | NoReturn      VarData              -- function decl. without return
     deriving Show
 
@@ -128,11 +128,13 @@ generateErrorMessages (TypeChecker [] _) = []
 generateErrorMessages (TypeChecker ((InvalidType (varName, dataType, _) exprDataType):xs) context) 
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("InvalidType Error: " ++ show varName ++ " is type of " ++ show dataType ++ " but given " ++ show exprDataType)
 generateErrorMessages (TypeChecker ((DupDecl varName):xs) context) 
-    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("DupDecl Error: " ++ show varName ++ " is already exists in the current scope ")
+    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("DupDecl Error: " ++ show varName ++ " is already exists in the current scope")
 generateErrorMessages (TypeChecker ((MissingDecl varName):xs) context) 
-    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " is used but wasn't declared ")
+    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " is used but wasn't declared")
 generateErrorMessages (TypeChecker ((NotAssigned varName):xs) context) 
-    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " was used but has no value ")
+    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " was used but has no value")
+generateErrorMessages (TypeChecker ((GlobalDecl varName):xs) context) 
+    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("GlobalDecl Error: " ++ " global variable " ++ show varName ++ " can be declared only in the main scope")
 
 -----------------------------------------------------------------------------
 -- Type Rules
@@ -182,6 +184,12 @@ checkVarDecl (varName, dataType) (Just expr) typeChecker
     | otherwise                             = addVar (varName, dataType, True) exprTypeChecker
     where (exprDataType, exprTypeChecker)   = checkAction expr typeChecker
 
+-- Checks that the global variable was initialized in the main scope
+checkGlVarDecl :: VarDef -> Maybe Expr -> TypeChecker -> TypeChecker
+checkGlVarDecl varDef@(varName, _) maybeExpr typeChecker@(TypeChecker _ (Context ((current, _), _) _))
+    | current == (0,0)  = checkVarDecl varDef maybeExpr typeChecker
+    | otherwise         = addError (GlobalDecl varName) typeChecker
+
 -- Checks that the variable exists in the (wrapping) scope and has a correct data type
 checkVarAssign :: VarName -> Expr -> TypeChecker -> TypeChecker
 checkVarAssign varName expr typeChecker
@@ -224,10 +232,14 @@ check [] typeChecker
     = decScope typeChecker
 check ((VarDecl varType maybeExpr):xs) typeChecker 
     = check xs $ checkVarDecl varType maybeExpr typeChecker
+check ((GlVarDecl varType maybeExpr):xs) typeChecker 
+    = check xs $ checkGlVarDecl varType maybeExpr typeChecker
 check ((VarAssign varName expr):xs) typeChecker
     = check xs $ checkVarAssign varName expr typeChecker
 check ((ArrInsert varName index expr):xs) typeChecker 
     = check xs $ checkArrInsert varName index expr typeChecker
+check ((FunDef funName argsDef maybeDataType script):xs) typeChecker 
+    = error $ "Functions not supported!"
 check ((ForLoop varType loopIter script):xs) typeChecker 
     = check xs $ checkForLoop varType loopIter script typeChecker
 check ((WhileLoop expr script):xs) typeChecker 
@@ -253,6 +265,8 @@ elaborate script
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = parseWith script "let x: Bool = true; if x { } else { }"
+steasy = parseWith script "fun incr(x: Int) -> Int {\
+                          \let x: Int = 0; return x;\
+                          \}"
 
 debug = error $ show $ tryElaborate steasy
