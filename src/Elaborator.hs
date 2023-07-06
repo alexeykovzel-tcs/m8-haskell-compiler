@@ -16,6 +16,10 @@ import qualified Data.Map as Map
 
 {-
 TODO:
+- Change HasValue to true when assigned
+- Parallel support (let, global are not allowed)
+- Ternary support
+- FunCall support
 - Add tests
 - Add support for functions
 -}
@@ -117,6 +121,11 @@ addVar varData@(varName, dataType, hasValue) typeChecker@(TypeChecker errors (Co
         True    -> addError (DupDecl varName) typeChecker
         False   -> TypeChecker errors $ Context scopeMap $ Map.insertWith (++) (fst (fst scopeMap)) [varData] scopeVars
 
+-- Adds all function arguments to the scope
+addArgs :: [VarDef] -> TypeChecker -> TypeChecker
+addArgs [] typeChecker = typeChecker
+addArgs ((varName, dataType):xs) typeChecker = addArgs xs $ addVar (varName, dataType, False) typeChecker
+
 -- Adds an error to Type Checker
 addError :: Error -> TypeChecker -> TypeChecker
 addError error (TypeChecker errors context) 
@@ -150,6 +159,7 @@ checkAction (Var varName) typeChecker
         Just (varName, dataType, False)  -> (IntType, addError (NotAssigned varName) typeChecker)
 checkAction expr typeChecker 
     = case (expr) of
+        (ArrAccess varName index) -> checkArrOp varName index typeChecker
         (Both left right)   -> checkTypeOp BoolType left right typeChecker
         (OneOf left right)  -> checkTypeOp BoolType left right typeChecker
         (Eq left right)     -> checkOp left right typeChecker
@@ -175,6 +185,12 @@ checkTypeOp dataType left right typeChecker
     | otherwise                                 = (dataType, rightTypeChecker)
     where   (leftDataType, leftTypeChecker)     = checkAction left typeChecker
             (rightDataType, rightTypeChecker)   = checkAction right leftTypeChecker
+
+checkArrOp :: VarName -> Integer -> TypeChecker -> (DataType, TypeChecker)
+checkArrOp varName index typeChecker
+    = case (findVar varName typeChecker) of
+        Nothing -> error $ "MissingDecl Error: array " ++ varName ++ " wasn't declared before usage"
+        Just (_, dataType, _) -> (getArrayType dataType, typeChecker)
 
 -- Checks that the value has a correct data type and adds it to the Context
 checkVarDecl :: VarDef -> Maybe Expr -> TypeChecker -> TypeChecker
@@ -206,6 +222,12 @@ checkArrInsert varName index expr typeChecker
     | otherwise                                     = exprTypeChecker
     where   (newVarName, dataType, hasValue)                   = fromJust $ findVar varName typeChecker
             (exprDataType, exprTypeChecker) = checkAction expr typeChecker
+ 
+checkFunDef :: FunName -> ArgsDef -> Maybe DataType -> Script -> TypeChecker -> TypeChecker
+checkFunDef funName argsDef maybeDataType script typeChecker = scriptTypeChecker
+    where funNameTypeChecker = addVar (funName, IntType, False) $ incScope typeChecker
+          argsDefTypeChecker = addArgs argsDef funNameTypeChecker
+          scriptTypeChecker = check script argsDefTypeChecker
 
 checkForLoop :: VarDef -> LoopIter -> Script -> TypeChecker -> TypeChecker
 checkForLoop (varName, IntType) (IterRange left right) script typeChecker = scriptTypeChecker
@@ -226,7 +248,7 @@ checkCondition expr ifScript elseScript typeChecker
         Just script -> check script $ incScope $ check ifScript (incScope ifTypeChecker)
         where (ifType, ifTypeChecker) = checkAction expr typeChecker
 
--- Checks the correctness of the written program
+-- Checks the correctness of the written program (types and scopes)
 check :: Script -> TypeChecker -> TypeChecker
 check [] typeChecker 
     = decScope typeChecker
@@ -239,7 +261,7 @@ check ((VarAssign varName expr):xs) typeChecker
 check ((ArrInsert varName index expr):xs) typeChecker 
     = check xs $ checkArrInsert varName index expr typeChecker
 check ((FunDef funName argsDef maybeDataType script):xs) typeChecker 
-    = error $ "Functions not supported!"
+    = check xs $ checkFunDef funName argsDef maybeDataType script typeChecker
 check ((ForLoop varType loopIter script):xs) typeChecker 
     = check xs $ checkForLoop varType loopIter script typeChecker
 check ((WhileLoop expr script):xs) typeChecker 
@@ -265,8 +287,7 @@ elaborate script
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = parseWith script "fun incr(x: Int) -> Int {\
-                          \let x: Int = 0; return x;\
-                          \}"
+steasy = parseWith script "let x: Int; let x: Int;"
+                        --   \fun sum(x: Int, y: Int) {return x + y;}"
 
 debug = error $ show $ tryElaborate steasy
