@@ -106,19 +106,19 @@ measureVar _ = 1
 -- testing
 -----------------------------------------------------------------------------
 
-testFile :: FilePath -> IO()
-testFile file = join $ printScopes <$> Map.toList <$> scopeMap 
-    where
-        prog      = tryParse script <$> readFile file
-        scopeMap  = scopes <$> findScopes <$> prog
+-- testFile :: FilePath -> IO()
+-- testFile file = join $ printScopes <$> Map.toList <$> scopeMap 
+--     where
+--         prog      = tryParse script <$> readFile file
+--         scopeMap  = scopes <$> findScopes <$> prog
 
-printScopes :: [(ScopeID, (VarMap, Depth, Size))] -> IO()
-printScopes [] = pure ()
-printScopes ((id, (vars, depth, size)):xs) = do
-    putStrLn $ show (id, depth, size) ++ " " 
-        ++ scopeRow (Map.toList vars)
-    printScopes xs
+-- printScopes :: [(ScopeID, (VarMap, Depth, Size))] -> IO()
+-- printScopes [] = pure ()
+-- printScopes ((id, (vars, depth, size)):xs) = do
+--     putStrLn $ show (id, depth, size) ++ " " 
+--         ++ scopeRow (Map.toList vars)
+--     printScopes xs
 
-scopeRow :: [(VarName, (VarPos, VarSize))] -> String
-scopeRow (x:xs) = show x ++ " " ++ scopeRow xs
-scopeRow [] = ""
+-- scopeRow :: [(VarName, (VarPos, VarSize))] -> String
+-- scopeRow (x:xs) = show x ++ " " ++ scopeRow xs
+-- scopeRow [] = ""

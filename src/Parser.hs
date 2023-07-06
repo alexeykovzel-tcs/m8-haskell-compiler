@@ -371,3 +371,18 @@ args = expr `sepBy` comma
 
 nullable :: Parser a -> Parser (Maybe a)
 nullable p = Just <$> p <|> pure Nothing
+
+-- Count the maximum number of concurrent threads
+maxConcurrentThreads :: Script -> Int
+maxConcurrentThreads = count 0 0
+  where
+    count maxThreads currentThreads [] = maxThreads
+    count maxThreads currentThreads (stmt:stmts)
+      | isFork stmt = count (max maxThreads (currentThreads + 1)) (currentThreads + 1) stmts
+      | isJoin stmt = count maxThreads (currentThreads - 1) stmts
+      | otherwise   = count maxThreads currentThreads stmts
+
+    isFork (Fork _ _) = True
+    isFork _          = False
+    isJoin (Join _)   = True
+    isJoin _          = False

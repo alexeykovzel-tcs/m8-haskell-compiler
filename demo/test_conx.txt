@@ -11,5 +11,5 @@ fork f2 {
 join f1;
 join f2;
 
-// "let x: Int = 5; fork f1 { x = x + 2; } fork f2 { x = x + 3; } join f1; join f2;"
+// "let x: Int = 5; fork f1 { fork f11 { let y: Int = 5; x = x * y; } x = x + 2; join f11; } fork f2 { x = x + 3; } join f1; join f2;"
 

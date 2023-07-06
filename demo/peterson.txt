@@ -28,3 +28,29 @@ join f1;
 join f2;
 
 
+//
+if detected that fork exists,
+do a branch at first line where all threads except main thread is sent to the busy wait loop (Branch regSprID, label)
+    the busy wait can be anywhere
+continue with the normal main thread operations
+once a fork is detected,
+        Load (ImmValue x) regB, -- x: address line where the fork code block is executed
+        WriteInstr regB (DirAddr x), -- which thread we call
+        Store regB (DirAddr 1), -- store which line is the thread in the correct local memory location
+then we jump to where the main thread code continues, so we skip basically fork{}
+do normal main thread executions
+when a join is found. according to which join it is the busy wait for the main thread is executed:
+        ReadInstr (DirAddr {x}), -- busy wait for fx
+        Receive regB, -- 22: -- get the status of the thread, if it is the same as the thread id, we know that it is done
+        Load (DirAddr 1) regC, -- load f1 from memory (the address was stored in the local memory)
+        Compute Equal regB regC regD, 
+        Branch regD (Rel (-4)), -- if we know that it is done we continue with the rest of the code.
+
+at the end of every forked code blocks we notify the main thread by changing the value in the shared memory to their regSprID
+in the busy wait for the threads we do:
+        ReadInstr (IndAddr regSprID), -- busy wait
+        Receive regA,   -- receive which part of the code to jump to
+        Compute Equal regA regB regC, 
+        Branch regC (Rel (-3)), -- if not equal then jump to busy wait
+        Jump (Ind regA), -- 12: jump
+

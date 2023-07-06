@@ -27,7 +27,6 @@ library
       Paths_alphascript
   hs-source-dirs:
       src
-      src/utils
   build-depends:
       QuickCheck
     , base
@@ -50,7 +49,6 @@ executable alphascript-exe
       Paths_alphascript
   hs-source-dirs:
       src
-      src/utils
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
