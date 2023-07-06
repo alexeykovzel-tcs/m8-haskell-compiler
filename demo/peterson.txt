@@ -1,32 +1,32 @@
-let turn: Int;
-let flag: Bool[2] = [false, false];
+global turn: Int;
+global flag1: Bool = false;
+global flag2: Bool = false;
 
-let thread_id: Int;
-set_thread_id(thread_id);
+let pid: Int;
+set_process_id(pid);
 
-if thread_id == 0 {
+if pid == 0 {
     while true {
-        flag[0] = true;
+        flag1 = true;
         turn = 1;
-        while flag[1] && turn == 1 {}
+        while flag2 && turn == 1 {}
         // critical section for P0
         print_str("P0 is in the critical section");
-        flag[0] = false;
+        flag1 = false;
         // completed
         print_str("P0 is done");
     }
 }
 
-if thread_id == 1 {
+if pid == 1 {
     while true {
-        flag[1] = true;
+        flag2 = true;
         turn = 0;
-        while flag[0] && turn == 0 {}
+        while flag1 && turn == 0 {}
         // critical section for P1
         print_str("P1 is in the critical section");
-        flag[1] = false;
+        flag2 = false;
         // completed
         print_str("P1 is done");
     }
 }
-

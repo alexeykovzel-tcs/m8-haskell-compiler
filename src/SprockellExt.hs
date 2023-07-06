@@ -16,6 +16,7 @@ type Depth      = Integer
 type VarSize    = Integer
 type VarPos     = (Depth, Offset)
 type VarMap     = Map VarName (VarPos, VarSize)
+type GlVarMap   = Map VarName (MemAddr, VarSize)
 
 type ScopeID    = Integer
 type ScopePath  = Map ScopeID ScopeID
@@ -24,12 +25,13 @@ type ScopeMap   = Map ScopeID (VarMap, Depth, Size)
 type FunMap     = Map FunName (ScopeID, Depth, [VarName])
 
 data Context = Ctx {
-    scopeId    :: ScopeID,
-    peerId     :: ScopeID,
-    funMap     :: FunMap,
-    scopeMap   :: ScopeMap,
-    scopePath  :: ScopePath,
-    freeRegs   :: [RegAddr]
+    scopeId     :: ScopeID,
+    peerId      :: ScopeID,
+    funMap      :: FunMap,
+    glVars      :: GlVarMap, 
+    scopeMap    :: ScopeMap,
+    scopePath   :: ScopePath,
+    freeRegs    :: [RegAddr]
 }
 
 -----------------------------------------------------------------------------

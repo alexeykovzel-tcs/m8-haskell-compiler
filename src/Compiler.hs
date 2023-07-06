@@ -52,11 +52,17 @@ toPeerCtx ctx stmt = case stmt of
 compileStmt :: Context -> Statement -> [Instruction]
 compileStmt ctx stmt = case stmt of
 
-    -- updates a variable value
-    VarDecl (name, _) Nothing      -> []
-    VarDecl (name, _) (Just expr)  -> updateVar ctx name expr
-    VarAssign name expr            -> updateVar ctx name expr
-    ArrInsert name idx expr        -> updateVarAtIdx ctx name idx expr
+    -- updates a variable
+    GlVarDecl (name, _) Nothing      -> [] 
+    GlVarDecl (name, _) (Just expr)  -> updateGlVar ctx name expr
+    VarDecl (name, _) Nothing        -> []
+    VarDecl (name, _) (Just expr)    -> updateVar ctx name expr
+    ArrInsert name idx expr          -> updateVarAtIdx ctx name idx expr
+
+    VarAssign name expr -> 
+        if    Map.member name (glVars ctx)
+        then  updateGlVar ctx name expr
+        else  updateVar ctx name expr
 
     -- puts instructions into a new scope
     InScope script -> childScope ctx script
@@ -64,7 +70,7 @@ compileStmt ctx stmt = case stmt of
     -- executes expression without saving the result
     Action expr ->
         let (reg2, ctx2) = occupyReg ctx 
-        in compileExpr ctx2 expr reg2 
+        in  compileExpr ctx2 expr reg2 
 
     -- compiles a function definition
     FunDef name args returnType script 
@@ -79,7 +85,7 @@ compileStmt ctx stmt = case stmt of
     ReturnVal expr 
         -> compileExpr ctx2 expr reg2
         ++ putVar ctx2 "_rtn_val" reg2
-        ++ prepReturn ctx -- TODO: Think about it...
+        ++ prepReturn ctx
         where 
             (reg2, ctx2) = occupyReg ctx
 
@@ -127,8 +133,11 @@ peerScope ctx = putInScope ctx . compileScript (peerCtx ctx)
 compileExpr :: Context -> Expr -> RegAddr -> [Instruction]
 compileExpr ctx expr reg = case expr of
 
-    Var name  -> loadVar ctx name reg
     Fixed val -> [loadImm (intVal val) reg]
+
+    Var name -> case Map.lookup name (glVars ctx) of
+        Just (addr, size)  -> [ReadInstr (DirAddr addr), Receive reg]
+        Nothing            -> loadVar ctx name reg
 
     -- compiles a binary operation
     Parser.Add e1 e2 -> compileBin ctx e1 e2 reg Sprockell.Add
@@ -238,6 +247,15 @@ intVal (Int val)    = val
 intVal (Bool val)   = intBool val
 intVal (Char val)   = toInteger $ ord val
 intVal val = error $ "failed translating value: " ++ show val
+
+-- updates a variable in shared memory
+updateGlVar :: Context -> VarName -> Expr -> [Instruction] 
+updateGlVar ctx name expr = 
+    compileExpr ctx2 expr reg2
+    ++ [WriteInstr reg2 (DirAddr addr)]
+    where 
+        (addr, size) = fromJust $ Map.lookup name $ glVars ctx 
+        (reg2, ctx2) = occupyReg ctx
 
 -- updates a variable in memory at the given index
 updateVarAtIdx :: Context -> VarName -> Integer -> Expr -> [Instruction]

@@ -28,6 +28,7 @@ type Script = [Statement]
 
 data Statement
     = VarDecl       VarDef (Maybe Expr)
+    | GlVarDecl     VarDef (Maybe Expr)
     | VarAssign     VarName Expr
     | ArrInsert     VarName Integer Expr
     | FunDef        FunName ArgsDef (Maybe DataType) Script
@@ -49,6 +50,7 @@ script = whiteSpace *> many statement
 statement :: Parser Statement
 statement =   
         varDecl         -- e.g. let x: Int;
+    <|> glVarDecl
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
     <|> inScope         -- e.g. { ... }
@@ -63,6 +65,13 @@ statement =
 varDecl :: Parser Statement
 varDecl = VarDecl
     <$  reserved "let" <*> varDef
+    <*> nullable (symbol "=" *> expr)
+    <*  semi
+
+-- parses a global variable declaration
+glVarDecl :: Parser Statement
+glVarDecl = GlVarDecl
+    <$  reserved "global" <*> varDef
     <*> nullable (symbol "=" *> expr)
     <*  semi
 

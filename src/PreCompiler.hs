@@ -12,8 +12,16 @@ import qualified Data.Map as Map
 
 -- initial context for compilation
 initCtx :: Script -> Context
-initCtx prog = Ctx 0 1 (funs ctx) (scopes ctx) (path ctx) userRegs
-    where ctx = studyScopes prog
+initCtx prog = let scopeCtx = studyScopes prog 
+    in Ctx {
+        scopeId     = 0,
+        peerId      = 1,
+        funMap      = funs scopeCtx,
+        glVars      = findGlVars prog,
+        scopeMap    = scopes scopeCtx,
+        scopePath   = path scopeCtx,
+        freeRegs    = userRegs
+    }
 
 -----------------------------------------------------------------------------
 -- post parser
@@ -55,7 +63,35 @@ postStmt (ForLoop i@(name, _) (IterRange from to) body) = [
 postStmt stmt = [stmt]
 
 -----------------------------------------------------------------------------
--- scope informer
+-- global variables
+-----------------------------------------------------------------------------
+
+type GlVarList  = [(VarName, (MemAddr, VarSize))]
+type MemAddr    = Int
+
+findGlVars :: Script -> GlVarMap
+findGlVars script = Map.fromList $ scriptGlVars 0 script
+
+scriptGlVars :: MemAddr -> Script -> GlVarList
+scriptGlVars addr [] = []
+scriptGlVars addr (x:xs) = 
+    let (nextAddr, vars) = stmtGlVars addr x
+    in  vars ++ scriptGlVars nextAddr xs
+
+stmtGlVars :: MemAddr -> Statement -> (MemAddr, GlVarList)
+stmtGlVars addr stmt = case stmt of
+    GlVarDecl (name, dataType) _ -> 
+        (addr + 1, [(name, (addr, measureVar dataType))])
+    
+    _ -> (addr, [])
+
+testGlVars :: FilePath -> IO()
+testGlVars file = do
+    code <- readFile file
+    putStrLn $ show $ findGlVars $ parseWith script code
+
+-----------------------------------------------------------------------------
+-- stack scopes
 -----------------------------------------------------------------------------
 
 type VarTable = [(VarName, (VarPos, VarSize))]

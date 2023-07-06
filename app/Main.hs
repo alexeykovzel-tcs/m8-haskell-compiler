@@ -34,7 +34,7 @@ runFile file = do
 
 runModules :: IO()
 runModules = do
-    putStrLn "Enter: {module} {function} {args} or quit"
+    putStrLn "\nEnter: {module} {function} {args} or quit"
     line <- getLine
     handleLine line
 

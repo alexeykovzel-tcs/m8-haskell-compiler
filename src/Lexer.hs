@@ -17,7 +17,8 @@ languageDef = emptyDef {
         ":", "?"                        -- ternary operators
     ],
     Token.reservedNames   = [ 
-        "let", "fun", "for", "while", "if", "return",
+        "let", "global", "for", "while", "if",
+        "fun", "return",
         "Int", "Char", "Bool", 
         "false", "true"
     ],
