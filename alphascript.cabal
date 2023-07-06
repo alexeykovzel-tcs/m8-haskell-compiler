@@ -16,11 +16,11 @@ extra-source-files:
 library
   exposed-modules:
       Compiler
-      Debugger
       Elaborator
       Lexer
       Parser
       PreCompiler
+      Runner
       SprockellExt
   other-modules:
       Paths_alphascript

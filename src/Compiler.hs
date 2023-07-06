@@ -1,6 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Compiler (compileRun, compile) where
+module Compiler (
+    compile, 
+    compileRun, 
+    compileAST, 
+    countWorkers
+) where
 
 import Sprockell
 import SprockellExt
@@ -11,20 +16,20 @@ import Data.Maybe
 import Data.Char (ord)
 import qualified Data.Map as Map
 
-compile :: String -> [Instruction]
-compile code = compileAST $ parseWith script code
+compile :: Int -> String -> [Instruction]
+compile num code = compileAST num $ parseWith script code
 
 compileRun :: String -> FunName -> [Integer] -> [Instruction]
-compileRun code funName args = compileAST $ ast 
+compileRun code funName args = compileAST 0 $ ast 
     ++ [Action $ FunCall "print" [FunCall funName funArgs]]
     where 
         ast      = parseWith script code
         funArgs  = Fixed <$> Int <$> args
 
-compileAST :: Script -> [Instruction]
-compileAST ast = startProg ++ prog ++ endProg ctx
+compileAST :: Int -> Script -> [Instruction]
+compileAST num ast = startProg ++ prog ++ endProg ctx
     where
-        ctx      = initCtx script
+        ctx      = initCtx script num
         script   = postScript $ ast
         prog     = compileScript ctx script
 
@@ -43,6 +48,7 @@ toPeerCtx :: Context -> Statement -> Context
 toPeerCtx ctx stmt = case stmt of
     InScope _               -> nextPeer ctx
     FunDef _ _ _ _          -> nextPeer ctx
+    Parallel _ _            -> nextPeer ctx
     WhileLoop _ _           -> nextPeer ctx
     Condition _ _ Nothing   -> nextPeer ctx
     Condition _ _ (Just _)  -> nextPeer $ nextPeer ctx
@@ -62,21 +68,16 @@ compileStmt ctx stmt = case stmt of
         then  updateGlVar ctx name expr
         else  updateVar ctx name expr
 
------------------------------------------------------------------------------
-
     -- compile parallel execution
     Parallel num script 
-        -> workers
-        ++ skipIfMain
-        ++ body
-        ++ [Jump $ Abs 3] -- jump to busy wait
+        -> startWorkers ctx workers
+        ++ skipIfMain ++ body
         ++ joinWorkers ctx workers
         where
-            body = [WriteInstr reg0 numberIO]
-            skipIfMain = [Jump (Rel $ length body + 2)]
-            (workers, ctx2) = startWorkers ctx num
-
------------------------------------------------------------------------------
+            (workers, wrkCtx) = occupyWorkers ctx $ fromInteger num
+            skipIfMain = [Jump (Rel $ length body + 1)]
+            body = childScope wrkCtx script
+                ++ [Jump $ Abs 3] -- jump to busy wait
 
     -- compiles array insertion
     ArrInsert name idx expr -> updateVarAtIdx ctx name idx expr
@@ -125,6 +126,8 @@ compileStmt ctx stmt = case stmt of
             cond      = skipCond ctx expr ifBody
             ifBody    = childScope ctx ifScript ++ jumpOver elseBody
             elseBody  = peerScope ctx elseScript
+
+    stmt -> error $ "no support for: " ++ show stmt
 
 -- handles a function return
 prepReturn :: Context -> [Instruction]
@@ -201,6 +204,12 @@ compileExpr ctx expr reg = case expr of
     FunCall "print" [expr]
         -> compileExpr ctx expr reg 
         ++ [WriteInstr reg numberIO] 
+
+    -- FunCall "lock" [Var name] 
+    --     -> [TestAnd]
+
+    -- FunCall "unlock" [Var name] 
+    --     -> compileExpr ctx expr reg
 
     FunCall name args
         -- eval arguments and put them on the stack

@@ -1,7 +1,0 @@
-print_str("start...");
-
-parallel 2 {
-    print_str("hello");
-}
-
-print_str("end...");

@@ -45,40 +45,27 @@ endProg ctx = endProcs ctx ++ [EndProg]
 -- process management
 -----------------------------------------------------------------------------
 
-startWorkers :: Context -> Integer -> ([Instruction], [MemAddr], Context)
-startWorkers ctx 0 = 
-startWorkers ctx num = 
-    ([
-        loadImm (3 * num) reg,
+startWorkers :: Context -> [MemAddr] -> [Instruction]
+startWorkers ctx workers = let reg = findReg ctx in
+    concat $ reverse $ (\idx -> [
+        Load (ImmValue $ 3 * idx) reg,
         Compute Add regPC reg reg,
-        WriteInstr reg (DirAddr addr)
-    ]
-    ++ next, addr : workers, ctx3)
-    where 
-        (next, workers, ctx3) = startWorkers ctx2 (num - 1) 
-        (addr, ctx2) = occupyWorker ctx
-        reg = findReg ctx
+        WriteInstr reg (DirAddr $ workers !! (idx - 1))
+    ]) <$> [1..length workers]
 
 joinWorkers :: Context -> [MemAddr] -> [Instruction] 
-joinWorkers ctx (addr:xs) = 
-    [
+joinWorkers ctx workers = let reg = findReg ctx in 
+    concat $ (\addr -> [
         ReadInstr (DirAddr addr),
         Receive reg,
         Compute NEq reg0 reg reg,
         Branch reg (Rel $ -3)
-    ]
-    ++ joinWorkers ctx xs
-    where 
-        reg = findReg ctx
+    ]) <$> workers
 
-occupyWorkers :: Context -> Integer -> [MemAddr]
-occupyWorkers _ 0 = []
-occupyWorkers ctx num = worker : occupyWorkers ctx2 (num - 1)
-    where (worker, ctx2) = occupyWorker ctx
-
-occupyWorker :: Context -> (MemAddr, Context)
-occupyWorker ctx = (w, ctx {freeWorkers = ws})
-    where (w:ws) = freeWorkers ctx
+occupyWorkers :: Context -> Int -> ([MemAddr], Context)
+occupyWorkers ctx num = 
+    let workers = freeWorkers ctx
+    in (take num workers, ctx {freeWorkers = drop num workers})
 
 initProcs :: [Instruction]
 initProcs = [

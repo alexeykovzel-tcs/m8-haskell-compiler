@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module PreCompiler (initCtx, postScript) where
+module PreCompiler (initCtx, postScript, countWorkers) where
 
 import Parser
 import SprockellExt
@@ -11,18 +11,36 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 -- initial context for compilation
-initCtx :: Script -> Context
-initCtx prog = let scopeCtx = studyScopes prog 
+initCtx :: Script -> Int -> Context
+initCtx prog num = let scopeCtx = studyScopes prog
     in Ctx {
         scopeId      = 0,
         peerId       = 1,
         funMap       = funs scopeCtx,
-        glVars       = findGlVars prog,
+        glVars       = findGlVars num prog,
         scopeMap     = scopes scopeCtx,
         scopePath    = path scopeCtx,
         freeRegs     = userRegs,
-        freeWorkers  = [1..7]
+        freeWorkers  = [1..num]
     }
+
+-----------------------------------------------------------------------------
+-- counter for workers 
+-----------------------------------------------------------------------------
+
+class WorkerCounter a where
+    countWorkers :: a -> Integer
+
+instance WorkerCounter Script where
+    countWorkers [] = 0
+    countWorkers (x:xs) 
+        = max (countWorkers x) (countWorkers xs)
+
+instance WorkerCounter Statement where
+    countWorkers (Parallel num script) 
+        = num * (max 1 $ countWorkers script)
+
+    countWorkers _ = 0
 
 -----------------------------------------------------------------------------
 -- post parser
@@ -33,8 +51,9 @@ postScript [] = []
 postScript (x:xs) = postStmt x ++ postScript xs
 
 postStmt :: Statement -> Script
-postStmt (WhileLoop cond script)  = [WhileLoop cond (postScript script)]
-postStmt (InScope script)         = [InScope (postScript script)]
+postStmt (WhileLoop cond script)  = [WhileLoop cond $ postScript script]
+postStmt (Parallel num script)    = [Parallel num $ postScript script] 
+postStmt (InScope script)         = [InScope $ postScript script]
 
 postStmt (Condition cond ifScript elseScript) = 
     [Condition cond (postScript ifScript) postElse]
@@ -70,10 +89,8 @@ postStmt stmt = [stmt]
 type GlVarList  = [(VarName, (MemAddr, VarSize))]
 type MemAddr    = Int
 
--- offset 10 from global memory (should be the actual number of processes)
-
-findGlVars :: Script -> GlVarMap
-findGlVars script = Map.fromList $ scriptGlVars 10 script
+findGlVars :: MemAddr -> Script -> GlVarMap
+findGlVars addr script = Map.fromList $ scriptGlVars addr script
 
 scriptGlVars :: MemAddr -> Script -> GlVarList
 scriptGlVars addr [] = []
@@ -91,7 +108,7 @@ stmtGlVars addr stmt = case stmt of
 testGlVars :: FilePath -> IO()
 testGlVars file = do
     code <- readFile file
-    putStrLn $ show $ findGlVars $ parseWith script code
+    putStrLn $ show $ findGlVars 5 $ parseWith script code
 
 -----------------------------------------------------------------------------
 -- stack scopes
@@ -158,6 +175,7 @@ allocStmt :: Statement -> ScopeCtx -> ScopeCtx
 allocStmt stmt ctx = case stmt of
     
     InScope script      -> allocScript script nextCtx
+    Parallel _ script   -> allocScript script nextCtx
     WhileLoop _ script  -> allocScript script nextCtx
 
     Condition _ ifScript Nothing -> allocScript ifScript nextCtx
