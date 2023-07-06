@@ -49,7 +49,6 @@ data Error
     | MissingDecl   VarName             -- calling non-existent entity
     | NotAssigned   VarName             -- using variable without value
     | GlobalDecl    VarName             -- creating global variable not in the main scope
-    | GlobalDecl    VarName             -- creating global variable not in the main scope
     | NoReturn      VarData              -- function decl. without return
     deriving Show
 
@@ -139,14 +138,9 @@ generateErrorMessages (TypeChecker ((InvalidType (varName, dataType, _) exprData
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("InvalidType Error: " ++ show varName ++ " is type of " ++ show dataType ++ " but given " ++ show exprDataType)
 generateErrorMessages (TypeChecker ((DupDecl varName):xs) context) 
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("DupDecl Error: " ++ show varName ++ " is already exists in the current scope")
-    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("DupDecl Error: " ++ show varName ++ " is already exists in the current scope")
 generateErrorMessages (TypeChecker ((MissingDecl varName):xs) context) 
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " is used but wasn't declared")
-    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " is used but wasn't declared")
 generateErrorMessages (TypeChecker ((NotAssigned varName):xs) context) 
-    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " was used but has no value")
-generateErrorMessages (TypeChecker ((GlobalDecl varName):xs) context) 
-    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("GlobalDecl Error: " ++ " global variable " ++ show varName ++ " can be declared only in the main scope")
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("MissingDecl Error: " ++ show varName ++ " was used but has no value")
 generateErrorMessages (TypeChecker ((GlobalDecl varName):xs) context) 
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("GlobalDecl Error: " ++ " global variable " ++ show varName ++ " can be declared only in the main scope")
@@ -212,12 +206,6 @@ checkGlVarDecl varDef@(varName, _) maybeExpr typeChecker@(TypeChecker _ (Context
     | current == (0,0)  = checkVarDecl varDef maybeExpr typeChecker
     | otherwise         = addError (GlobalDecl varName) typeChecker
 
--- Checks that the global variable was initialized in the main scope
-checkGlVarDecl :: VarDef -> Maybe Expr -> TypeChecker -> TypeChecker
-checkGlVarDecl varDef@(varName, _) maybeExpr typeChecker@(TypeChecker _ (Context ((current, _), _) _))
-    | current == (0,0)  = checkVarDecl varDef maybeExpr typeChecker
-    | otherwise         = addError (GlobalDecl varName) typeChecker
-
 -- Checks that the variable exists in the (wrapping) scope and has a correct data type
 checkVarAssign :: VarName -> Expr -> TypeChecker -> TypeChecker
 checkVarAssign varName expr typeChecker
@@ -259,7 +247,6 @@ checkCondition expr ifScript elseScript typeChecker
     = case (elseScript) of
         Nothing     -> check ifScript $ incScope ifTypeChecker
         Just script -> check script $ incScope $ check ifScript (incScope ifTypeChecker)
-        where (ifType, ifTypeChecker) = checkAction expr typeChecker
         where (ifType, ifTypeChecker) = checkAction expr typeChecker
 
 -- Checks the correctness of the written program (types and scopes)
