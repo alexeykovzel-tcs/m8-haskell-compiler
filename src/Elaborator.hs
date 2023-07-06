@@ -16,9 +16,10 @@ import qualified Data.Map as Map
 
 {-
 TODO:
+- Add array in functions handling (put and return)
 - Change HasValue to true when assigned
 - Parallel support (let, global are not allowed)
-- Ternary support
+- Ternary support: a > 2 ? true : false
 - FunCall support
 - Add tests
 - Add support for functions
@@ -45,11 +46,13 @@ data TypeChecker
 
 data Error 
     = InvalidType   VarData DataType     -- applying operation to an invalid type
+    | InvalidExprType   DataType DataType
     | DupDecl       VarName             -- duplicate entity declaration
     | MissingDecl   VarName             -- calling non-existent entity
     | NotAssigned   VarName             -- using variable without value
     | GlobalDecl    VarName             -- creating global variable not in the main scope
     | NoReturn      VarData              -- function decl. without return
+    | ComingSoon
     deriving Show
 
 initTypeChecker :: TypeChecker
@@ -90,20 +93,34 @@ getType (Char _) = CharType
 getType (Int _) = IntType
 -- getType (Arr [Char _]) = StrType
 
+findScopeVars :: VarName -> TypeChecker -> Maybe (Current, [VarData])
+findScopeVars varName (TypeChecker _ (Context ((current@(0,0), (-1,0)), _) scopeVars))
+    | isJust types      == False = Nothing
+    | otherwise                  = Just (current, fromJust types)
+    where types   = getValue current scopeVars
+findScopeVars varName typeChecker@(TypeChecker _ (Context ((current, _), _) scopeVars)) 
+    | isJust types      == False = findScopeVars varName (decScope typeChecker)
+    | otherwise                  = Just (current, fromJust types)
+    where types   = getValue current scopeVars
+
 -- Traverses TypeChecker to find a variable in (wrapping) scopes
 findVar :: VarName -> TypeChecker -> Maybe VarData
-findVar varName (TypeChecker _ (Context ((current@(0,0), (-1,0)), _) scopeVars))
-    | isJust types      == False = Nothing
-    | isJust varType    == False = Nothing
-    | otherwise                  = varType
-    where   types   = getValue current scopeVars
-            varType = find (\(x, _, _) -> x == varName) (fromJust types)
-findVar varName typeChecker@(TypeChecker _ (Context ((current, _), _) scopeVars)) 
-    | isJust types      == False = findVar varName (decScope typeChecker)
-    | isJust varType    == False = findVar varName (decScope typeChecker)
-    | otherwise                  = varType
-    where   types   = getValue current scopeVars
-            varType = find (\(x, _, _) -> x == varName) (fromJust types)
+findVar varName typeChecker
+    = case (findScopeVars varName typeChecker) of
+        Nothing -> Nothing
+        Just (_, scopeVars) -> find (\(x, _, _) -> x == varName) scopeVars
+
+updateScopeVars :: VarName -> TypeChecker -> TypeChecker
+updateScopeVars varName typeChecker@(TypeChecker errors (Context scopeMap scopeVars))
+    = case (findScopeVars varName typeChecker) of
+        Nothing -> typeChecker
+        Just (current, varDatas) -> TypeChecker errors $ Context scopeMap $ Map.insert current (changeVar varName varDatas) scopeVars
+
+changeVar :: VarName -> [VarData] -> [VarData]
+changeVar _ [] = []
+changeVar changeName (varDef@(varName, dataType, _):xs)
+    | (changeName == varName) = (varName, dataType, True) : changeVar changeName xs
+    | otherwise               = varDef : changeVar changeName xs
 
 -- Checks that the variable was declared in a current scope
 isDeclared :: VarData -> TypeChecker -> Bool
@@ -136,6 +153,8 @@ generateErrorMessages :: TypeChecker -> String
 generateErrorMessages (TypeChecker [] _) = []
 generateErrorMessages (TypeChecker ((InvalidType (varName, dataType, _) exprDataType):xs) context) 
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("InvalidType Error: " ++ show varName ++ " is type of " ++ show dataType ++ " but given " ++ show exprDataType)
+generateErrorMessages (TypeChecker ((InvalidExprType expectedType exprDataType):xs) context) 
+    = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("InvalidExprType Error: expression type expected " ++ show expectedType ++ " but given " ++ show exprDataType)
 generateErrorMessages (TypeChecker ((DupDecl varName):xs) context) 
     = generateErrorMessages (TypeChecker xs context) ++ "\n" ++ ("DupDecl Error: " ++ show varName ++ " is already exists in the current scope")
 generateErrorMessages (TypeChecker ((MissingDecl varName):xs) context) 
@@ -152,6 +171,7 @@ generateErrorMessages (TypeChecker ((GlobalDecl varName):xs) context)
 -- Traverses the expression inside a statement
 checkAction :: Expr -> TypeChecker -> (DataType, TypeChecker)
 checkAction (Fixed value) typeChecker = (getType value, typeChecker)
+checkAction (Neg (Fixed value)) typeChecker = (getType value, typeChecker)
 checkAction (Var varName) typeChecker 
     = case (findVar varName typeChecker) of
         Nothing                   -> (IntType, addError (MissingDecl varName) typeChecker)
@@ -211,7 +231,7 @@ checkVarAssign :: VarName -> Expr -> TypeChecker -> TypeChecker
 checkVarAssign varName expr typeChecker
     | isJust (findVar varName typeChecker) == False = addError (MissingDecl varName) typeChecker
     | (dataType /= exprDataType)                    = addError (InvalidType (newVarName, dataType, hasValue) exprDataType) typeChecker
-    | otherwise                                     = exprTypeChecker
+    | otherwise                                     = updateScopeVars varName exprTypeChecker
     where   (newVarName, dataType, hasValue)    = fromJust $ findVar varName typeChecker 
             (exprDataType, exprTypeChecker)     = checkAction expr typeChecker
 
@@ -240,13 +260,12 @@ checkWhileLoop :: Expr -> Script -> TypeChecker -> TypeChecker
 checkWhileLoop expr script typeChecker  = check script $ incScope whileTypeChecker
     where (_, whileTypeChecker)         = checkAction expr typeChecker
 
--- FIX: Check IF Expression
 checkCondition :: Expr -> Script -> Maybe Script -> TypeChecker -> TypeChecker
-checkCondition expr ifScript elseScript typeChecker 
-    = case (elseScript) of
-        Nothing     -> check ifScript $ incScope ifTypeChecker
-        Just script -> check script $ incScope $ check ifScript (incScope ifTypeChecker)
-        where (ifType, ifTypeChecker) = checkAction expr typeChecker
+checkCondition expr ifScript elseScript typeChecker
+    | (ifType == BoolType) == False = addError (InvalidExprType BoolType ifType) typeChecker
+    | isJust elseScript == False = check ifScript $ incScope ifTypeChecker
+    | otherwise = check (fromJust elseScript) $ incScope $ check ifScript (incScope ifTypeChecker)
+    where (ifType, ifTypeChecker) = checkAction expr typeChecker
 
 -- Checks the correctness of the written program (types and scopes)
 check :: Script -> TypeChecker -> TypeChecker
@@ -276,18 +295,23 @@ check ((Action expr):xs) typeChecker
 tryElaborate :: Script -> TypeChecker
 tryElaborate script = check script initTypeChecker
 
-elaborate :: Script -> ()
+elaborate :: Script -> IO ()
 elaborate script
-    | getErrorSize result == 0 = ()
+    | getErrorSize result == 0 = putStrLn ""
     | otherwise = error $ generateErrorMessages result
     where result = tryElaborate script
+
+elaborateFile :: FilePath -> IO ()
+elaborateFile file = do
+    code <- readFile file
+    let ast = parseWith script code
+    elaborate ast
 
 -----------------------------------------------------------------------------
 -- Tests
 -----------------------------------------------------------------------------
 
 steasy :: Script
-steasy = parseWith script "let x: Int; let x: Int;"
-                        --   \fun sum(x: Int, y: Int) {return x + y;}"
+steasy = parseWith script "let sum: Int = 0; for i: Int in 1..10 {sum = sum + i; }"
 
 debug = error $ show $ tryElaborate steasy
