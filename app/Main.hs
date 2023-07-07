@@ -58,7 +58,7 @@ handleInput :: String -> IO()
 handleInput "quit" = pure ()
 handleInput line = do
     let parts     = words line  
-    let filePath  = "demo/" ++ parts !! 0 ++ ".txt"
+    let filePath  = "demo/" ++ parts !! 0 ++ ".as"
     let funName   = parts !! 1
     let args      = read <$> drop 2 parts
 
