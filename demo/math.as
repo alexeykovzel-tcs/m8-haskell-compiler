@@ -11,8 +11,7 @@ fun incr(a: Int) -> Int {
 // calculates a quotient after division 
 fun div(a: Int, b: Int) -> Int {
     if b <= 0 {
-        print_str("error: invalid dividend");
-        return -1;
+        error("invalid dividend");
     }
     let k: Int = 0;
     while a >= b {
@@ -25,8 +24,7 @@ fun div(a: Int, b: Int) -> Int {
 // calculates a remainder after division
 fun mod(a: Int, b: Int) -> Int {
     if b <= 0 {
-        print_str("error: invalid dividend");
-        return -1;
+        error("invalid dividend");
     }
     while a >= b {
         a = a - b;
@@ -37,8 +35,7 @@ fun mod(a: Int, b: Int) -> Int {
 // raises a value to the given power
 fun pow(a: Int, b: Int) -> Int {
     if b < 0 {
-        print_str("error: power shouldn't be negative");
-        return -1;
+        error("power shouldn't be negative");
     }
     let k: Int = 1;
     for i: Int in 1..b {

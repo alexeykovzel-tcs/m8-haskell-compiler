@@ -200,6 +200,9 @@ compileExpr ctx expr reg = case expr of
     FunCall "lock" [Var name]        -> lockMem reg $ glVarAddr ctx name
     FunCall "unlock" [Var name]      -> unlockMem $ glVarAddr ctx name
 
+    FunCall "error" [Fixed msg]      -> printStrLn ctx ("error: " ++ show msg)
+                                        ++ [EndProg]
+
     -- ultimate function call
     FunCall name args
         -> evalArgs ctx reg args
