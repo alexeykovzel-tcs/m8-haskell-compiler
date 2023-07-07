@@ -21,7 +21,6 @@ library
       Parser
       PreCompiler
       Runner
-      SemanticsTest
       SprockellExt
   other-modules:
       Paths_alphascript
