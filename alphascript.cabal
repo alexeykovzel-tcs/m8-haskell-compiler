@@ -21,8 +21,8 @@ library
       Parser
       PreCompiler
       Runner
+      SemanticsTest
       SprockellExt
-      SyntaxTest
   other-modules:
       Paths_alphascript
   hs-source-dirs:
@@ -58,6 +58,7 @@ test-suite alphascript-test
   main-is: Main.hs
   other-modules:
       ContextualTest
+      SyntaxTest
       Paths_alphascript
   hs-source-dirs:
       test
