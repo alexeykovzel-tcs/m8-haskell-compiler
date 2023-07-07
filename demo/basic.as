@@ -23,7 +23,7 @@ fun say_hello() {
     print_str("hello");
 }
 
-fun decr(n: Int) {
+fun decr(n: Int) -> Int {
     return n - 1;
 }
 

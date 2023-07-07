@@ -111,8 +111,8 @@ scriptGlVars addr (x:xs) =
 -- finds global variables in a statement
 stmtGlVars :: MemAddr -> Statement -> (MemAddr, GlVarList)
 stmtGlVars addr stmt = case stmt of
-    GlVarDecl (name, dataType) _ -> 
-        (addr + 1, [(name, (addr, measureVar dataType))])
+    GlVarDecl (name, dataType) expr -> 
+        (addr + 1, [(name, (addr, measureVar dataType expr))])
     
     _ -> (addr, [])
 
@@ -249,15 +249,17 @@ allocVars :: Script -> VarPos -> VarTable
 allocVars [] _ = []
 allocVars (x:xs) varPos@(depth, offset) = case x of
 
-    VarDecl (name, dataType) _
+    VarDecl (name, dataType) expr
         -> varEntry : allocVars xs (depth, offset + varSize)
         where
-            varSize = measureVar dataType
+            varSize = measureVar dataType expr
             varEntry = (name, (varPos, varSize))
         
     _ -> allocVars xs varPos
     
 -- calculates variable size based on its data type
-measureVar :: DataType -> VarSize
-measureVar (ArrType _ size) = size
-measureVar _ = 1
+measureVar :: DataType -> Maybe Expr -> VarSize
+measureVar (ArrType _ size) _ = size
+measureVar StrType Nothing = error "strings should be declared"
+measureVar StrType (Just (Fixed (Arr chars))) = toInteger $ length chars 
+measureVar _ _ = 1

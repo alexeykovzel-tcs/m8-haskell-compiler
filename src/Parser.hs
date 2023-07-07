@@ -261,15 +261,17 @@ type ArrSize = Integer
 
 data DataType
     = CharType
+    | StrType
     | BoolType
     | IntType
     | ArrType DataType ArrSize
     deriving (Eq)
 
 instance Show DataType where
-    show CharType = "Char"
-    show BoolType = "Bool"
-    show IntType = "Int"
+    show CharType   = "Char"
+    show StrType    = "String"
+    show BoolType   = "Bool"
+    show IntType    = "Int"
     show (ArrType dataType _) = "[" ++ show dataType ++ "]"
 
 -- parses either a basic data type or an array
@@ -280,9 +282,10 @@ dataType = foldl ArrType <$> baseType <*> arrDecl
 -- parses a basic data type
 baseType :: Parser DataType
 baseType = 
-        CharType   <$ reserved "Char"
-    <|> BoolType   <$ reserved "Bool"
-    <|> IntType    <$ reserved "Int"
+        CharType    <$ reserved "Char"
+    <|> StrType     <$ reserved "String"
+    <|> BoolType    <$ reserved "Bool"
+    <|> IntType     <$ reserved "Int"
 
 -----------------------------------------------------------------------------
 -- value parsers

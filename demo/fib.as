@@ -26,3 +26,8 @@ fun fib_rec(n: Int) -> Int {
         ? fib_rec(n - 1) + fib_rec(n - 2)
         : n;
 }
+
+/* --- uncomment for testing --- */
+
+// print(fib_iter(10));    // result: 55
+// print(fib_rec(5));      // result: 5

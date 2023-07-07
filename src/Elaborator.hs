@@ -95,6 +95,7 @@ getType (Bool _) = BoolType
 getType (Char _) = CharType
 getType (Int _) = IntType
 getType (Arr vals)
+    | isText vals = StrType
     | checkArrayType vals = ArrType (getType (head vals)) (fromIntegral (length vals))
     | otherwise = error "Array contains different data types!"
 
