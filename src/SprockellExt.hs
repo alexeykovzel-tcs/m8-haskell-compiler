@@ -300,7 +300,10 @@ putVarAtIdx ctx name reg idx = applyVar ctx name
 putPC :: Context -> VarName -> [Instruction]
 putPC ctx name = applyVar ctx name
     $ \ctx arpReg offset -> 
-    [
+    let
+        (reg2, ctx2) = occupyReg ctx 
+        reg3 = findReg ctx2
+    in [
         loadImm offset reg2,
         Compute Add reg2 arpReg arpReg,
         copyReg regPC reg2,
@@ -308,9 +311,6 @@ putPC ctx name = applyVar ctx name
         Compute Add reg2 reg3 reg2,
         Store reg2 (IndAddr arpReg)
     ]
-    where 
-        (reg2, ctx2) = occupyReg ctx 
-        reg3 = findReg ctx2
 
 -- updates an array with the given values
 putArrImm :: Context -> VarName -> [Integer] -> [Instruction]
