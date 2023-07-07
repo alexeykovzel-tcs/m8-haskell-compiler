@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module SemanticsTests where
+module SemanticsTest where
 
 import Test.QuickCheck
 import Runner
@@ -16,10 +16,10 @@ fibTestRec :: Integer -> IO ()
 fibTestRec arg = putStrLn ("Running: \"fib_rec (" ++ show arg ++ ")\" \n Expected: " ++ show (fib arg)) *> runFileFun "demo/fib.as" "fib_rec" [arg]
 
 funTestFive :: IO ()
-funTestFive = putStrLn "Running: \"five ()\" \n Expected: 7, 2, 3, 5" *> runFile "demo/functions.as" "five"
+funTestFive = putStrLn "Running: \"five ()\" \n Expected: 7, 2, 3, 5" *> runFile "demo/functions.as"
 
 funTestParallel :: IO ()
-funTestParallel = putStrLn "Running: \"parallels.as\" \n Expected: 20000" *> runFile "demo/parallels.as"
+funTestParallel = putStrLn "Running: \"parallels.as\" \n Expected: 20000" *> runFile "demo/banking.as"
 
 runSemanticsTests :: IO ()
 runSemanticsTests =

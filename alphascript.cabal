@@ -57,7 +57,7 @@ test-suite alphascript-test
   main-is: Main.hs
   other-modules:
       ContextualTest
-      SemanticsTests
+      SemanticsTest
       SyntaxTest
       Paths_alphascript
   hs-source-dirs:
