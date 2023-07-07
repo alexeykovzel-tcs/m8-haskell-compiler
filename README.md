@@ -1,6 +1,29 @@
 # PP Final Project: AlphaScript
 
-This project ... bla bla bla
+This project is a compiler for a simple programming language called AlphaScript. 
+
+It supports the following features:
+
+- basic data types (Int, Char, Bool)
+- while and for loops
+- if/else conditions
+- locks and synchronization
+- parallel execution
+- arrays and strings
+- nested functions with call-by-reference
+- soft division ("math.as" library)
+
+## Source files: /src
+
+| file            | description                                                    |
+| --------------- | -------------------------------------------------------------- |
+| Compiler.hs     | compiles AST into the SpriL language                           |
+| Elaborator.hs   | handles errors during compilation                              |
+| Lexer.hs        | defines language tokens & basic parsers                        |
+| Parser.hs       | parses the source code into AST                                |
+| PreCompiler.hs  | collects information about the program before compilation      |
+| Runner.hs       | runs/debugs the program, and prints its compiled code          |
+| SprockellExt.hs | manages memory, registers, IO, variables, scopes and processes |
 
 ## Prerequisites
 
@@ -14,7 +37,7 @@ To test if you have these tools set up properly, run the following command in th
 stack --version
 ```
 
-## Compiling
+## Compilation
 
 In a terminal, run:
 
@@ -22,17 +45,31 @@ In a terminal, run:
 stack build
 ```
 
-This installs a local version of GHC and the libraries needed. The files in `src/` and `app/` are then compiled.
+This installs a local version of GHC and the libraries needed. 
+The files in `src/` and `app/` are then compiled.
 
 ## Running
 
-To run a specific file, use:
+To compile and run a specific file, use:
 
 ```bash
 stack run -- {file_path}
 ```
 
-To try functions of the prebuilt modules in /demo, use:
+You can try some of the already written programs in the /demo directory:
+
+| file         | description                                                                                                            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| banking.as   | demonstrates the functionality for parallel execution and synchronization on the basis of an elementary banking system |
+| basic.as     | demonstrates the basic functionality of the compiler                                                                   |
+| fib.as       | contains algorithms for the fibonacci sequence                                                                         |
+| functions.as | demonstrates the functionality of nested functions as well as nested variables                                         |
+| math.as      | contains a basic mathematical library with support for division, exponentiation, etc                                   |
+| parallels.as | demonstrates the functionality for the nested parallel execution                                                       |
+| peterson.as  | contains an implementation for the Peterson' algorithm                                                                 |
+| scopes.as    | demonstrates a fairly complex example of nested scoping with variables having the same name but in different scopes    |
+
+To try specific functions from the prebuilt modules in /demo, use:
 
 ```bash
 stack run

@@ -1,6 +1,6 @@
 /*
     This file demonstrates the basic functionality of the compiler
-    with support for variables, loops, etc.
+    such as variables, functions, arrays, loops and conditions.
 */
 
 /* ------------------------ */

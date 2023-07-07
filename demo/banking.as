@@ -1,6 +1,7 @@
 /*
     This file demonstrates the functionality for parallel execution
-    and synchronization using the locking mechanism.
+    and synchronization using the locking mechanism on the basis 
+    of an elementary banking system.
     
     It creates 4 processes that make 1000 transactions each to 
     the same bank account. The expected result is 20000.
