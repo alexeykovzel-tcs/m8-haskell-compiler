@@ -29,8 +29,8 @@ fun decr(n: Int) {
 
 let ten: Int = decr(11);
 
-print(ten);  // result: 10
-say_hello(); // result: "Hello"
+print(ten);   // result: 10
+say_hello();  // result: "hello"
 
 /* ------------------------ */
 /*          arrays          */
@@ -39,13 +39,13 @@ say_hello(); // result: "Hello"
 let arr1: Int[4] = [1, 2, 3, 4];
 let arr2: Char[3] = "foo";
 
-print_str(arr2); // result: "foo"
+print_str(arr2);  // result: "foo"
 
 arr2[0] = 'b';
 arr2[1] = 'a';
 arr2[2] = 'r';
 
-print_str(arr2); // result: "bar"
+print_str(arr2);  // result: "bar"
 
 /* ------------------------ */
 /*           loops          */
@@ -57,13 +57,13 @@ for i: Int in 1..10 {
     sum = sum + i;    
 }
 
-print(sum); // result: 55
+print(sum);  // result: 55
 
 while sum > 0 {
     sum = sum - 10;
 }
 
-print(sum); // result: -5
+print(sum);  // result: -5
 
 /* ------------------------ */
 /*        conditions        */
