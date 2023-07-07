@@ -8,13 +8,15 @@ import System.Directory (doesFileExist)
 import System.Environment (getArgs)
 
 {- 
-    the user has the following options:
+    the user has the following options to test the compiler:
     
-    1. pass a file path as an argument, so that the 
-    corresponding file gets executed.
+    1. pass a file path as an argument: "stack run -- demo/math.txt",
+       and the corresponding file gets executed.
     
-    2. don't pass anything, so that the user can try function 
-    from the prebuilt modules. The following modules are available:
+    2. don't pass anything, and the user will be able to try functions 
+       from the prebuilt modules. 
+       
+    The following modules are available:
 
     - fib    | fib_rec, fib_iter
     - math   | incr, div, mod, pow, abs
@@ -32,14 +34,26 @@ main = do
         [filePath]  -> runFile filePath
         []          -> runModules
 
--- runs functions in modules given by the user
 runModules :: IO()
 runModules = do
-    putStrLn "\nEnter: {module} {function} {args} or quit"
+    putStrLn "\nthe following modules are available:\n"
+    
+    putStrLn "fib    | fib_rec (recursive), fib_iter (iterative)"
+    putStrLn "math   | incr, div, mod, pow, abs"
+    
+    putStrLn "\nfor example, here are possible commands:\n"
+    
+    putStrLn "math div 100 5     // result: 20"
+    putStrLn "fib fib_iter 10    // result: 55"
+
+    askInputCycle
+
+askInputCycle :: IO()
+askInputCycle = do
+    putStrLn "\nenter: {module} {function} {args} or quit"
     line <- getLine
     handleInput line
 
--- handles user input from the terminal 
 handleInput :: String -> IO()
 handleInput "quit" = pure ()
 handleInput line = do
@@ -52,6 +66,6 @@ handleInput line = do
     
     if fileExists
         then runFileFun filePath funName args
-        else putStrLn $ "File " ++ filePath ++ " does not exist."
+        else putStrLn $ "file " ++ filePath ++ " does not exist."
 
-    main
+    askInputCycle

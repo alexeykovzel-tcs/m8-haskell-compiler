@@ -1,4 +1,4 @@
-name:                AlphaScript
+name:                alphascript
 version:             0.1.0.0
 author:              Group 22
 
@@ -24,6 +24,17 @@ executables:
   alphascript-exe:
     main: Main.hs
     source-dirs: app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - alphascript
+
+tests:
+  alphascript-test:
+    main: Main.hs
+    source-dirs: test
     ghc-options:
     - -threaded
     - -rtsopts

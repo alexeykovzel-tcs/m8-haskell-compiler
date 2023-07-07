@@ -1,5 +1,5 @@
 /*
-    This module contains algorithms for the fibonacci sequence.
+    This file contains algorithms for the fibonacci sequence.
 
     Note that as there is a strict restriction on memory (32 blocks),
     the recursive approach might not work for n > 5.
