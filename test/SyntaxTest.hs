@@ -2,71 +2,91 @@
 
 module SyntaxTest where
 
-import Test.QuickCheck
+import Test.QuickCheck 
 import Control.Exception
 import Parser
 import Lexer
+import Elaborator
 
------------------------------------------------------------------------------
--- generator for the correct script
------------------------------------------------------------------------------
+-- -----------------------------------------------------------------------------
+-- -- generator for the correct script
+-- -----------------------------------------------------------------------------
 
-instance Arbitrary Statement where
-    arbitrary = oneof [
-        VarDecl    <$> arbitrary <*> arbitrary,
-        GlVarDecl  <$> arbitrary <*> arbitrary,
-        VarAssign  <$> arbitrary <*> arbitrary,
-        ArrInsert  <$> arbitrary <*> arbitrary <*> arbitrary,
-        FunDef     <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary,
-        ForLoop    <$> arbitrary <*> arbitrary <*> arbitrary,
-        WhileLoop  <$> arbitrary <*> arbitrary,
-        Condition  <$> arbitrary <*> arbitrary <*> arbitrary,
-        Parallel   <$> arbitrary <*> arbitrary,
-        InScope    <$> arbitrary,
-        ReturnVal  <$> arbitrary,
-        Action     <$> arbitrary ]
+-- data NonEmptyList a = NonEmptyList [a] deriving (Show)
 
-instance Arbitrary Expr where
-    arbitrary = sized expr
-        where
-            expr 0 = Parser.Fixed <$> arbitrary
-            expr n = let nextExpr = expr (n `div` 2) in oneof [
-                FunCall    <$> arbitrary <*> resize (n `div` 2) arbitrary,
-                ArrAccess  <$> arbitrary <*> arbitrary,
-                Ternary    <$> nextExpr  <*> nextExpr <*> nextExpr,
-                Both       <$> nextExpr  <*> nextExpr,
-                OneOf      <$> nextExpr  <*> nextExpr,
-                Eq         <$> nextExpr  <*> nextExpr,
-                MoreEq     <$> nextExpr  <*> nextExpr,
-                LessEq     <$> nextExpr  <*> nextExpr,
-                More       <$> nextExpr  <*> nextExpr,
-                Less       <$> nextExpr  <*> nextExpr,
-                Add        <$> nextExpr  <*> nextExpr,
-                Sub        <$> nextExpr  <*> nextExpr,
-                Mult       <$> nextExpr  <*> nextExpr,
-                Neg        <$> nextExpr,
-                Var        <$> arbitrary,
-                Parser.Fixed  <$> arbitrary ]
+-- -- Generates non-empty scripts
+-- instance Arbitrary a => Arbitrary (SyntaxTest.NonEmptyList a) where
+--     arbitrary = SyntaxTest.NonEmptyList <$> (listOf1 arbitrary)
 
-instance Arbitrary DataType where
-    arbitrary = oneof [
-        pure CharType,
-        pure BoolType,
-        pure IntType,
-        ArrType <$> arbitrary <*> arbitrary ]
+-- instance Arbitrary Statement where
+--     arbitrary = oneof [
+--         VarDecl    <$> genVarDef <*> (Just <$> arbitrary),
+--         GlVarDecl  <$> genVarDef <*> (Just <$> arbitrary),
+--         VarAssign  <$> genName <*> arbitrary,
+--         ArrInsert  <$> genName <*> arbitrary <*> arbitrary,
+--         FunDef     <$> genName <*> genArgsDef <*> arbitrary <*> arbitrary,
+--         ForLoop    <$> arbitrary <*> arbitrary <*> arbitrary,
+--         WhileLoop  <$> arbitrary <*> arbitrary,
+--         Condition  <$> arbitrary <*> arbitrary <*> (Just <$> arbitrary),
+--         Parallel   <$> arbitrary <*> arbitrary,
+--         InScope    <$> arbitrary,
+--         ReturnVal  <$> arbitrary,
+--         Action     <$> arbitrary ]
 
-instance Arbitrary Value where
-    arbitrary = oneof [
-        Bool <$> arbitrary,
-        Char <$> arbitrary,
-        Int  <$> arbitrary,
-        Arr  <$> arbitrary ]
+-- instance Arbitrary Expr where
+--     arbitrary = sized expr
+--         where
+--             expr 0 = Fixed <$> arbitrary
+--             expr n = let nextExpr = expr (n `div` 2) in oneof [
+--                 FunCall    <$> genName <*> resize (n `div` 2) arbitrary,
+--                 ArrAccess  <$> genName <*> arbitrary,
+--                 Ternary    <$> nextExpr  <*> nextExpr <*> nextExpr,
+--                 Both       <$> nextExpr  <*> nextExpr,
+--                 OneOf      <$> nextExpr  <*> nextExpr,
+--                 Eq         <$> nextExpr  <*> nextExpr,
+--                 MoreEq     <$> nextExpr  <*> nextExpr,
+--                 LessEq     <$> nextExpr  <*> nextExpr,
+--                 More       <$> nextExpr  <*> nextExpr,
+--                 Less       <$> nextExpr  <*> nextExpr,
+--                 Add        <$> nextExpr  <*> nextExpr,
+--                 Sub        <$> nextExpr  <*> nextExpr,
+--                 Mult       <$> nextExpr  <*> nextExpr,
+--                 Neg        <$> nextExpr,
+--                 Var        <$> genName,
+--                 Fixed  <$> arbitrary ]
 
-instance Arbitrary LoopIter where
-    arbitrary = IterRange <$> arbitrary <*> arbitrary
+-- instance Arbitrary DataType where
+--     arbitrary = oneof [
+--         pure CharType,
+--         pure BoolType,
+--         pure IntType,
+--         ArrType <$> arbitrary <*> arbitrary ]
 
-autoScript :: IO Script
-autoScript = generate (resize 3 arbitrary)
+-- instance Arbitrary Value where
+--     arbitrary = oneof [
+--         Bool <$> arbitrary,
+--         Char <$> elements ['a'..'z'],
+--         Int  <$> arbitrary,
+--         Arr  <$> listOf arbitrary ]
+
+-- genVarDef :: Gen VarDef
+-- genVarDef = (,) <$> genName <*> arbitrary
+
+-- genArgsDef :: Gen ArgsDef
+-- genArgsDef = listOf genVarDef
+
+-- instance Arbitrary LoopIter where
+--     arbitrary = IterRange <$> arbitrary <*> arbitrary
+
+-- prop_script :: Property
+-- prop_script = forAll autoScript 
+--         $ \(NonEmptyList script) -> parseScript (pretty script) == script
+
+-- genName :: Gen String
+-- genName = vectorOf 3 $ elements "abcdefghijklmnopqrstuvwxyz"
+
+-- autoScript :: Gen (SyntaxTest.NonEmptyList Statement)
+-- autoScript = NonEmptyList <$> resize 1 arbitrary
 
 -----------------------------------------------------------------------------
 -- utils
@@ -79,6 +99,9 @@ throwsError x = catch (evaluate x >> return False) handler
 handler :: ErrorCall -> IO Bool
 handler _ = return True
 
+-----------------------------------------------------------------------------
+-- data
+-----------------------------------------------------------------------------
 -- invalid test inputs
 invalidInputs :: [String]
 invalidInputs = 
@@ -147,6 +170,10 @@ validInputs =
         "let x: Int = 1; if x > 3 { return 1; } else { parallel 2 { return 2; }}", -- Script
         "for x: Int in 1..10 { return 1; } if x > 3 { return 1; } else {if x > 2 {parallel 2 { return 2; }}}" -- Script
     ]
+
+-----------------------------------------------------------------------------
+-- tests
+-----------------------------------------------------------------------------
 
 -- test that error thrown when parsing invalid syntax with one element
 prop_invalidSyntax :: Property
