@@ -98,3 +98,11 @@ stack test
 ```
 
 This will run all test executables as defined in the "test" section of `package.yml`.
+
+In a terminal, run:
+```
+stack ghci test/SemanticsTest.hs
+runSemanticsTests 
+```
+
+This will run all the semantics tests in defined in "test/Semantics.hs"
