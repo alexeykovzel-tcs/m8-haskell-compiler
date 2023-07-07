@@ -3,14 +3,14 @@
     as well as nested variables.
 */
 
+fun two() -> Int {
+    return 2;
+}
+
 let x: Int = 7;
 
 fun five() -> Int {
     let x: Int = 0;
-
-    fun two() -> Int {
-        return 2;
-    }
 
     fun three() -> Int {
         return 3;

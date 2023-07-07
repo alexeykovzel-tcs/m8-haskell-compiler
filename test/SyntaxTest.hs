@@ -2,7 +2,7 @@
 
 module SyntaxTest where
 
-import Test.QuickCheck as QC
+import Test.QuickCheck
 import Control.Exception
 import Parser
 import Lexer
@@ -11,62 +11,62 @@ import Lexer
 -- generator for the correct script
 -----------------------------------------------------------------------------
 
-instance QC.Arbitrary Statement where
-    arbitrary = QC.oneof [
-        VarDecl     <$> QC.arbitrary <*> QC.arbitrary,
-        GlVarDecl   <$> QC.arbitrary <*> QC.arbitrary,
-        VarAssign   <$> QC.arbitrary <*> QC.arbitrary,
-        ArrInsert   <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-        FunDef      <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-        ForLoop     <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-        WhileLoop   <$> QC.arbitrary <*> QC.arbitrary,
-        Condition   <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary,
-        Parallel    <$> QC.arbitrary <*> QC.arbitrary,
-        InScope     <$> QC.arbitrary,
-        ReturnVal   <$> QC.arbitrary,
-        Action      <$> QC.arbitrary ]
+instance Arbitrary Statement where
+    arbitrary = oneof [
+        VarDecl    <$> arbitrary <*> arbitrary,
+        GlVarDecl  <$> arbitrary <*> arbitrary,
+        VarAssign  <$> arbitrary <*> arbitrary,
+        ArrInsert  <$> arbitrary <*> arbitrary <*> arbitrary,
+        FunDef     <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary,
+        ForLoop    <$> arbitrary <*> arbitrary <*> arbitrary,
+        WhileLoop  <$> arbitrary <*> arbitrary,
+        Condition  <$> arbitrary <*> arbitrary <*> arbitrary,
+        Parallel   <$> arbitrary <*> arbitrary,
+        InScope    <$> arbitrary,
+        ReturnVal  <$> arbitrary,
+        Action     <$> arbitrary ]
 
-instance QC.Arbitrary Expr where
-    arbitrary = QC.sized expr
+instance Arbitrary Expr where
+    arbitrary = sized expr
         where
-            expr 0 = Parser.Fixed <$> QC.arbitrary
-            expr n = let nextExpr = expr (n `div` 2) in QC.oneof [
-                FunCall         <$> QC.arbitrary <*> QC.resize (n `div` 2) QC.arbitrary,
-                Ternary         <$> nextExpr <*> nextExpr <*> nextExpr,
-                ArrAccess       <$> QC.arbitrary <*> QC.arbitrary,
-                Both            <$> nextExpr <*> nextExpr,
-                OneOf           <$> nextExpr <*> nextExpr,
-                Eq              <$> nextExpr <*> nextExpr,
-                MoreEq          <$> nextExpr <*> nextExpr,
-                LessEq          <$> nextExpr <*> nextExpr,
-                More            <$> nextExpr <*> nextExpr,
-                Less            <$> nextExpr <*> nextExpr,
-                Add             <$> nextExpr <*> nextExpr,
-                Sub             <$> nextExpr <*> nextExpr,
-                Mult            <$> nextExpr <*> nextExpr,
-                Neg             <$> nextExpr,
-                Var             <$> QC.arbitrary,
-                Parser.Fixed    <$> QC.arbitrary ]
+            expr 0 = Parser.Fixed <$> arbitrary
+            expr n = let nextExpr = expr (n `div` 2) in oneof [
+                FunCall    <$> arbitrary <*> resize (n `div` 2) arbitrary,
+                ArrAccess  <$> arbitrary <*> arbitrary,
+                Ternary    <$> nextExpr  <*> nextExpr <*> nextExpr,
+                Both       <$> nextExpr  <*> nextExpr,
+                OneOf      <$> nextExpr  <*> nextExpr,
+                Eq         <$> nextExpr  <*> nextExpr,
+                MoreEq     <$> nextExpr  <*> nextExpr,
+                LessEq     <$> nextExpr  <*> nextExpr,
+                More       <$> nextExpr  <*> nextExpr,
+                Less       <$> nextExpr  <*> nextExpr,
+                Add        <$> nextExpr  <*> nextExpr,
+                Sub        <$> nextExpr  <*> nextExpr,
+                Mult       <$> nextExpr  <*> nextExpr,
+                Neg        <$> nextExpr,
+                Var        <$> arbitrary,
+                Parser.Fixed  <$> arbitrary ]
 
-instance QC.Arbitrary DataType where
-    arbitrary = QC.oneof [
+instance Arbitrary DataType where
+    arbitrary = oneof [
         pure CharType,
         pure BoolType,
         pure IntType,
-        ArrType <$> QC.arbitrary <*> QC.arbitrary ]
+        ArrType <$> arbitrary <*> arbitrary ]
 
-instance QC.Arbitrary Value where
-    arbitrary = QC.oneof [
-        Bool <$> QC.arbitrary,
-        Char <$> QC.arbitrary,
-        Int  <$> QC.arbitrary,
-        Arr  <$> QC.arbitrary]
+instance Arbitrary Value where
+    arbitrary = oneof [
+        Bool <$> arbitrary,
+        Char <$> arbitrary,
+        Int  <$> arbitrary,
+        Arr  <$> arbitrary ]
 
-instance QC.Arbitrary LoopIter where
-    arbitrary = IterRange <$> QC.arbitrary <*> QC.arbitrary
+instance Arbitrary LoopIter where
+    arbitrary = IterRange <$> arbitrary <*> arbitrary
 
 autoScript :: IO Script
-autoScript = QC.generate (QC.resize 3 QC.arbitrary)
+autoScript = generate (resize 3 arbitrary)
 
 -----------------------------------------------------------------------------
 -- utils
@@ -80,8 +80,8 @@ handler :: ErrorCall -> IO Bool
 handler _ = return True
 
 -- invalid test inputs
-testInvalidInputs :: [String]
-testInvalidInputs = 
+invalidInputs :: [String]
+invalidInputs = 
     [
         "let x = 1;", -- VarDecl
         "let x Int = 1;", -- VarDecl
@@ -125,9 +125,8 @@ testInvalidInputs =
         "let x = 8; def f() { return ; }"
     ]
 
--- valid test inputs
-testValidInputs :: [String]
-testValidInputs = 
+validInputs :: [String]
+validInputs = 
     [
         "let x: Int = 1;", -- VarDecl
         "global x: Int = 1;", -- GlVarDecl
@@ -157,11 +156,11 @@ prop_invalidSyntax =
 
 -- test that error thrown when parsing invalid syntax of script
 prop_invalidSyntax2 :: Property
-prop_invalidSyntax2 = forAll (elements testInvalidInputs) $ \s ->
+prop_invalidSyntax2 = forAll (elements invalidInputs) $ \s ->
     ioProperty $ throwsError $ parseWith script s
 
 prop_validSyntax :: Property
-prop_validSyntax = forAll (elements testValidInputs) $ \s ->
+prop_validSyntax = forAll (elements validInputs) $ \s ->
     ioProperty $ not <$> throwsError (parseWith script s)
 
 return []

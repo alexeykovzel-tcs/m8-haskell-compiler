@@ -56,7 +56,7 @@ test-suite alphascript-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
-      ElaboratorTest
+      ContextualTest
       SyntaxTest
       Paths_alphascript
   hs-source-dirs:

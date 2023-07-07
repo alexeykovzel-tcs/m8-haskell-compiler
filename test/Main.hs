@@ -1,13 +1,13 @@
 module Main where
 
 import SyntaxTest
-import ElaboratorTest
+import ContextualTest
 
 main :: IO ()
 main = do
   results <- sequence [
         SyntaxTest.check,
-        ElaboratorTest.check
+        ContextualTest.check
     ]
   if all id results
     then putStrLn "All tests passed"
