@@ -30,3 +30,14 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - alphascript
+
+tests:
+  alphascript-test:
+    main: Main.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - alphascript
