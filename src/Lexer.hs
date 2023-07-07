@@ -1,5 +1,7 @@
 module Lexer where
 
+{- author: Aliaksei Kouzel - s2648563 -}
+
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Text.ParserCombinators.Parsec.Language (emptyDef)
 import Text.ParserCombinators.Parsec
@@ -70,3 +72,6 @@ reservedOp = Token.reservedOp lexer
 
 whiteSpace :: Parser ()
 whiteSpace = Token.whiteSpace lexer
+
+nullable :: Parser a -> Parser (Maybe a)
+nullable p = Just <$> p <|> pure Nothing

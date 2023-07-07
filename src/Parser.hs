@@ -1,5 +1,7 @@
 module Parser where
 
+{- author: Aliaksei Kouzel - s2648563 -}
+
 import Test.QuickCheck as QC
 import Text.ParserCombinators.Parsec
 import Data.List (intercalate)
@@ -13,9 +15,16 @@ import Lexer
 -- parseWith script    "for i: Int in [1, 2, 3] { print(i); }"
 -- parseWith expr      "2 * (3 + 4) / 6"
 
+parseScript :: String -> Script
+parseScript code = parseWith script code
+
+-- parsers a script in a file
+parseFile :: FilePath -> IO Script
+parseFile file = parseWith script <$> readFile file
+
 -- parses a string with the given parser
 parseWith :: Parser a -> String -> a
-parseWith p xs = either (error . show) id $ parse p "" xs
+parseWith p code = either (error . show) id $ parse p "" code
 
 -----------------------------------------------------------------------------
 -- statement parsing
@@ -51,7 +60,7 @@ script = whiteSpace *> many statement
 statement :: Parser Statement
 statement =   
         varDecl         -- e.g. let x: Int;
-    <|> glVarDecl
+    <|> glVarDecl       -- e.g. global x: Int;
     <|> try varAssign   -- e.g. x = 3 + y;
     <|> try arrInsert   -- e.g. arr[2] = x + 3;
     <|> inScope         -- e.g. { ... }
@@ -63,7 +72,7 @@ statement =
     <|> returnVal       -- e.g. return x;
     <|> action          -- e.g. print(x);
 
--- parses a variable declaration
+-- parses a local variable declaration
 varDecl :: Parser Statement
 varDecl = VarDecl
     <$  reserved "let" <*> varDef
@@ -92,7 +101,7 @@ arrInsert = ArrInsert
     <*  symbol "=" <*> expr 
     <*  semi
 
--- parses a typical scope
+-- parses an inner scope
 inScope :: Parser Statement
 inScope = InScope 
     <$> braces script
@@ -105,7 +114,7 @@ funDef = FunDef
     <*> nullable (symbol "->" *> dataType)
     <*> braces script
 
--- parses a "for" loop
+-- parses a for loop
 forLoop :: Parser Statement
 forLoop = ForLoop 
     <$  reserved "for" <*> varDef
@@ -117,7 +126,7 @@ loopIter :: Parser LoopIter
 loopIter = IterRange 
     <$> expr <* symbol ".." <*> expr
 
--- parses a "while" loop
+-- parses a while loop
 whileLoop :: Parser Statement
 whileLoop = WhileLoop
     <$  reserved "while" <*> expr 
@@ -190,7 +199,7 @@ operation = logicand `chainl1` op
     where op = (Both  <$ reservedOp "&&") 
            <|> (OneOf <$ reservedOp "||")
 
--- logicands are chained like: a && b || c 
+-- parsers logicands chained like: a && b || c 
 logicand :: Parser Expr
 logicand = comparand `chainl1` op
     where op = (Eq      <$ reservedOp "==")
@@ -199,18 +208,18 @@ logicand = comparand `chainl1` op
            <|> (More    <$ reservedOp ">")
            <|> (Less    <$ reservedOp "<")
 
--- comparands are chained like: a == b 
+-- parsers comparands chained like: a == b 
 comparand :: Parser Expr
 comparand = term `chainl1` op
     where op = (Add <$ reservedOp "+")
            <|> (Sub <$ reservedOp "-")
 
--- terms are chained like: a + b - c
+-- parsers terms chained like: a + b - c
 term :: Parser Expr
 term = factor `chainl1` op
     where op = (Mult <$ reservedOp "*")
 
--- factors are chained like: a * b / c
+-- parsers factors chained like: a * b / c
 factor :: Parser Expr
 factor = negation
     <|> fixedValue
@@ -294,12 +303,12 @@ arrToStr vals = if isText vals
     then arrToText vals 
     else "[" ++ (intercalate ", " $ show <$> vals) ++ "]"
 
--- converts an array of values to a text
+-- converts an array of values to text
 arrToText :: [Value] -> String
 arrToText [] = []
 arrToText ((Char c):xs) = c : arrToText xs
 
--- returns true if the given values are all chars
+-- returns true if the given values are chars
 isText :: [Value] -> Bool
 isText [] = True
 isText ((Char c):xs) = isText xs
@@ -328,13 +337,13 @@ character = between (char '\'') (char '\'') anyChar
 array :: Parser [Value]
 array = brackets $ value `sepBy` comma
 
--- parses a boolean value
+-- parses a boolean
 boolean :: Parser Bool
 boolean = False <$ reserved "false"
       <|> True  <$ reserved "true"
 
 -----------------------------------------------------------------------------
--- other parsers
+-- variable/argument parsers
 -----------------------------------------------------------------------------
 
 type VarDef = (VarName, DataType)
@@ -346,14 +355,10 @@ varDef :: Parser VarDef
 varDef = (,) <$> name <*> typeDecl
     where typeDecl = colon *> dataType
 
--- parses arguments' definition
+-- parses the definition of arguments
 argsDef :: Parser ArgsDef
 argsDef = varDef `sepBy` comma
 
 -- parses arguments as expressions
 args :: Parser [Expr]
 args = expr `sepBy` comma
-
--- maybe parses (on failure returns Nothing)
-nullable :: Parser a -> Parser (Maybe a)
-nullable p = Just <$> p <|> pure Nothing

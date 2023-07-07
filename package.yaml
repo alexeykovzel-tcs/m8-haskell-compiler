@@ -1,4 +1,4 @@
-name:                alphascript
+name:                AlphaScript
 version:             0.1.0.0
 author:              Group 22
 
@@ -8,8 +8,6 @@ extra-source-files:
 description:
   This project is a compiler for a simple programming language designed 
   for educational purposes, and may not be suitable for production use. 
-  While the language it compiles is simple, it covers fundamental 
-  concepts such as variables and functions.
 
 dependencies:
 - base

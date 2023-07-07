@@ -1,16 +1,21 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module PreCompiler (initCtx, postScript, countWorkers) where
+{- author: Aliaksei Kouzel - s2648563 -}
+
+module PreCompiler (
+    initCtx, 
+    postScript, 
+    countWorkers
+) where
 
 import Parser
 import SprockellExt
-import Debug.Trace
 import Control.Monad (join)
 import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 
--- initial context for compilation
+-- builds the initial context for compilation
 initCtx :: Script -> Int -> Context
 initCtx prog num = let scopeCtx = studyScopes prog
     in Ctx {
@@ -25,8 +30,10 @@ initCtx prog num = let scopeCtx = studyScopes prog
     }
 
 -----------------------------------------------------------------------------
--- counter for workers 
+-- worker (process) counter 
 -----------------------------------------------------------------------------
+
+{- countes the number of workers needed for the program -}
 
 class WorkerCounter a where
     countWorkers :: a -> Integer
@@ -38,13 +45,15 @@ instance WorkerCounter Script where
 
 instance WorkerCounter Statement where
     countWorkers (Parallel num script) 
-        = num * (max 1 $ countWorkers script)
+        = num + num * countWorkers script
 
     countWorkers _ = 0
 
 -----------------------------------------------------------------------------
 -- post parser
 -----------------------------------------------------------------------------
+
+{- modifies the parsed script before compilation -}
 
 postScript :: Script -> Script
 postScript [] = []
@@ -57,18 +66,15 @@ postStmt (InScope script)         = [InScope $ postScript script]
 
 postStmt (Condition cond ifScript elseScript) = 
     [Condition cond (postScript ifScript) postElse]
-    where 
-        postElse = case elseScript of
-            Just script  -> Just $ postScript script
-            Nothing      -> Nothing
+    where postElse = maybe Nothing (Just . postScript) elseScript
 
--- add variable for code address to the function
+-- adds a function variable for the code address
 postStmt (FunDef name args returnType script) = [
         VarDecl ("_f_" ++ name, IntType) Nothing,
         FunDef name args returnType (postScript script) 
     ]
 
--- change "for" loop to "while" as it's easier to compile
+-- changes for loops to while as it's easier to compile
 postStmt (ForLoop i@(name, _) (IterRange from to) script) = [
     InScope [
         VarDecl i (Just $ from),
@@ -86,18 +92,23 @@ postStmt stmt = [stmt]
 -- global variables
 -----------------------------------------------------------------------------
 
-type GlVarList  = [(VarName, (MemAddr, VarSize))]
-type MemAddr    = Int
+{- allocates memory addresses for global variables -}
 
+type MemAddr    = Int
+type GlVarList  = [(VarName, (MemAddr, VarSize))]
+
+-- finds global variables in a program
 findGlVars :: MemAddr -> Script -> GlVarMap
 findGlVars addr script = Map.fromList $ scriptGlVars addr script
 
+-- finds global variables in a script
 scriptGlVars :: MemAddr -> Script -> GlVarList
 scriptGlVars addr [] = []
 scriptGlVars addr (x:xs) = 
     let (nextAddr, vars) = stmtGlVars addr x
     in  vars ++ scriptGlVars nextAddr xs
 
+-- finds global variables in a statement
 stmtGlVars :: MemAddr -> Statement -> (MemAddr, GlVarList)
 stmtGlVars addr stmt = case stmt of
     GlVarDecl (name, dataType) _ -> 
@@ -105,14 +116,11 @@ stmtGlVars addr stmt = case stmt of
     
     _ -> (addr, [])
 
-testGlVars :: FilePath -> IO()
-testGlVars file = do
-    code <- readFile file
-    putStrLn $ show $ findGlVars 5 $ parseWith script code
-
 -----------------------------------------------------------------------------
 -- stack scopes
 -----------------------------------------------------------------------------
+
+{- allocates variables positions in memory for different scopes -}
 
 type VarTable = [(VarName, (VarPos, VarSize))]
 
@@ -173,11 +181,13 @@ allocSubScopes (x:xs) ctx =
 -- allocates statement variables
 allocStmt :: Statement -> ScopeCtx -> ScopeCtx 
 allocStmt stmt ctx = case stmt of
-    
+
+    -- allocates variables in single scope statements
     InScope script      -> allocScript script nextCtx
     Parallel _ script   -> allocScript script nextCtx
     WhileLoop _ script  -> allocScript script nextCtx
-
+    
+    -- allocates variables in conditions 
     Condition _ ifScript Nothing -> allocScript ifScript nextCtx
     Condition _ ifScript (Just elseScript) -> 
         allocScript elseScript $ ctx {
@@ -190,11 +200,12 @@ allocStmt stmt ctx = case stmt of
             elseId      = currId ifCtx + 1
             elsePath    = Map.insert nextId elseId $ path ifCtx
 
+    -- allocates variables in function definitions
     FunDef name args returnType script -> allocScript actRecord funCtx
         where 
             actRecord   = buildAR script args returnType
             argNames    = fst <$> args
-            funCtx      = updateFuns nextCtx name (nextId, depth ctx - 1, argNames)
+            funCtx      = addFun nextCtx name (nextId, depth ctx - 1, argNames)
 
     _ -> ctx
 
@@ -202,10 +213,11 @@ allocStmt stmt ctx = case stmt of
         nextId  = currId ctx + 1 
         nextCtx = ctx { currId = nextId }
 
-updateFuns :: ScopeCtx -> FunName -> (ScopeID, Depth, [VarName]) -> ScopeCtx
-updateFuns ctx name entry = ctx { funs = Map.insert name entry $ funs ctx }
+-- adds a function entry to the context
+addFun :: ScopeCtx -> FunName -> (ScopeID, Depth, [VarName]) -> ScopeCtx
+addFun ctx name entry = ctx { funs = Map.insert name entry $ funs ctx }
 
--- calculates scope size based on its variable allocation
+-- calculates the scope size based on its variable allocation
 scopeSize :: VarTable -> Integer
 scopeSize [] = 0
 scopeSize ((_, (_, size)):xs) = size + scopeSize xs
@@ -219,12 +231,12 @@ buildAR script args returnType
     : declVars args
     ++ script
 
--- declares variables based on definitions
+-- declares variables from definitions
 declVars :: [VarDef] -> Script
 declVars [] = []
 declVars (x:xs) = VarDecl x Nothing : declVars xs
 
--- adds ARP variable at the end of the script
+-- adds an ARP variable at the end of the script
 addArp :: Script -> Script
 addArp script = script ++ [intVar "_arp"]
 

@@ -1,19 +1,23 @@
 module Main where
 
 import Sprockell
-import Compiler (compile, compileRun)
-import System.Directory (doesFileExist)
-import System.Environment (getArgs)
-import Control.Monad (join)
+import Compiler
 import Runner
 
-{- 
-    You can either pass a file path as an argument, in which case the
-    corresponding file gets executed, or you can test the compiler using
-    prebuilt modules. The following modules are available:
+import System.Directory (doesFileExist)
+import System.Environment (getArgs)
 
-    fib:     fib_rec, fib_iter
-    math:    incr, div, mod, pow, abs
+{- 
+    the user has the following options:
+    
+    1. pass a file path as an argument, so that the 
+    corresponding file gets executed.
+    
+    2. don't pass anything, so that the user can try function 
+    from the prebuilt modules. The following modules are available:
+
+    - fib    | fib_rec, fib_iter
+    - math   | incr, div, mod, pow, abs
 
     For example, here are possible commands:
 
@@ -28,15 +32,17 @@ main = do
         [filePath]  -> runFile filePath
         []          -> runModules
 
+-- runs functions in modules given by the user
 runModules :: IO()
 runModules = do
     putStrLn "\nEnter: {module} {function} {args} or quit"
     line <- getLine
-    handleLine line
+    handleInput line
 
-handleLine :: String -> IO()
-handleLine "quit" = pure ()
-handleLine line = do
+-- handles user input from the terminal 
+handleInput :: String -> IO()
+handleInput "quit" = pure ()
+handleInput line = do
     let parts     = words line  
     let filePath  = "demo/" ++ parts !! 0 ++ ".txt"
     let funName   = parts !! 1
@@ -45,12 +51,7 @@ handleLine line = do
     fileExists <- doesFileExist filePath
     
     if fileExists
-        then runFun filePath funName args
+        then runFileFun filePath funName args
         else putStrLn $ "File " ++ filePath ++ " does not exist."
 
     main
-
-runFun :: FilePath -> String -> [Integer] -> IO() 
-runFun file name args = join 
-    $ (\code -> run [compileRun code name args]) 
-    <$> readFile file 
