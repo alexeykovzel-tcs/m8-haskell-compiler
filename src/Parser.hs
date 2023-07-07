@@ -169,6 +169,7 @@ data Expr
     | Both          Expr Expr
     | OneOf         Expr Expr
     | Eq            Expr Expr
+    | NotEq         Expr Expr
     | MoreEq        Expr Expr
     | LessEq        Expr Expr
     | More          Expr Expr
@@ -204,6 +205,7 @@ operation = logicand `chainl1` op
 logicand :: Parser Expr
 logicand = comparand `chainl1` op
     where op = (Eq      <$ reservedOp "==")
+           <|> (NotEq   <$ reservedOp "!=")
            <|> (MoreEq  <$ reservedOp ">=")
            <|> (LessEq  <$ reservedOp "<=")
            <|> (More    <$ reservedOp ">")

@@ -166,6 +166,7 @@ compileExpr ctx expr reg = case expr of
     Parser.Sub  e1 e2 -> compileBin ctx e1 e2 reg Sprockell.Sub
     Mult        e1 e2 -> compileBin ctx e1 e2 reg Mul
     Eq          e1 e2 -> compileBin ctx e1 e2 reg Equal
+    NotEq       e1 e2 -> compileBin ctx e1 e2 reg NEq
     MoreEq      e1 e2 -> compileBin ctx e1 e2 reg GtE
     LessEq      e1 e2 -> compileBin ctx e1 e2 reg LtE
     More        e1 e2 -> compileBin ctx e1 e2 reg Gt

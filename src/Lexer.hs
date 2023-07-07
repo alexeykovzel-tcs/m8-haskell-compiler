@@ -12,11 +12,11 @@ import Text.ParserCombinators.Parsec
 
 languageDef = emptyDef {
     Token.reservedOpNames = [
-        "&&", "||",                     -- logicand operators
-        "==", ">=", "<=", ">", "<",     -- comparand operators
-        "+", "-",                       -- term operators
-        "*", "/", "%",                  -- factor operators
-        ":", "?"                        -- ternary operators
+        "&&", "||",                         -- logicand operators
+        "!=", "==", ">=", "<=", ">", "<",   -- comparand operators
+        "+", "-",                           -- term operators
+        "*", "/", "%",                      -- factor operators
+        ":", "?"                            -- ternary operators
     ],
     Token.reservedNames   = [ 
         "let", "global", "for", "while", "if",
