@@ -23,7 +23,7 @@ catch :: String -> Error
 catch = head . errors . tryElaborate . parseScript
 
 wrongType :: Error
-wrongType = InvalidType ("somevar", IntType, True, False) BoolType
+wrongType = InvalidType ("somevar", IntType, True, False, -1) BoolType
 
 prop_wrongType1 = wrongType == catch "let var1: Int = 1; var1 = true;"
 prop_wrongType2 = wrongType == catch "let var1: Bool = false; var1 = 2;"
