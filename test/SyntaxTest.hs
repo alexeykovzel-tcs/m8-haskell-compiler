@@ -155,12 +155,13 @@ prop_invalidSyntax =
     ioProperty $ throwsError $ parseWith script s
 
 -- test that error thrown when parsing invalid syntax of script
-prop_invalidSyntax2 :: Property
-prop_invalidSyntax2 = forAll (elements invalidInputs) $ \s ->
+prop_invalidSyntaxScript :: Property
+prop_invalidSyntaxScript = forAll (elements invalidInputs) $ \s ->
     ioProperty $ throwsError $ parseWith script s
 
-prop_validSyntax :: Property
-prop_validSyntax = forAll (elements validInputs) $ \s ->
+-- test that no error will be thrown when given valid
+prop_validSyntaxScript :: Property
+prop_validSyntaxScript = forAll (elements validInputs) $ \s ->
     ioProperty $ not <$> throwsError (parseWith script s)
 
 return []
