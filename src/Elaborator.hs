@@ -18,10 +18,7 @@ import qualified Data.Map as Map
 TODO:
 - Add support for functions
 - Parallel support (only global can be called)
-
-- Ternary support: a > 2 ? true : false
 - Add array in functions handling (put and return)
-- Add tests
 -}
 
 type Current    = (Int, Int)
@@ -74,9 +71,9 @@ incScope (TypeChecker errors (Context ((old@(a,b), (c,d)), scopePath) scopeVars)
 -- Go one step back in the scope tree
 decScope :: TypeChecker -> TypeChecker
 decScope typeChecker@(TypeChecker errors (Context (((0,0), (-1,0)), scopePath) scopeVars)) = typeChecker
-decScope (TypeChecker errors (Context ((_, previous), scopePath) scopeVars))
-                = (TypeChecker errors (Context ((previous, fetched), scopePath) scopeVars))
-                where fetched = fromJust $ Map.lookup previous scopePath
+decScope (TypeChecker errors (Context ((current, previous), scopePath) scopeVars))
+                = (TypeChecker errors (Context ((fetched, current), scopePath) scopeVars))
+                where fetched = fromJust $ Map.lookup current scopePath
 
 -- Returns an array type
 getArrayType :: DataType -> DataType
@@ -360,6 +357,8 @@ elaborateFile file = do
 steasy :: Script
 steasy = parseWith script "let a: Int = 0; \
                           \fun incr(x: Int) -> Int { a = a + x; return a; }\
+                          \fun sum(x: Int, y: Int) -> Int { return x + y; }\
+                          \fun mult(x: Int, y: Int) -> Int { return x * y; }\
                           \incr(5);"
 
 debug = error $ show $ tryElaborate steasy
