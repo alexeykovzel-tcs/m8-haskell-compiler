@@ -260,13 +260,13 @@ data DataType
     | BoolType
     | IntType
     | ArrType DataType ArrSize
-    deriving (Show, Eq)
+    deriving (Eq)
 
--- instance Show DataType where
---     show CharType = "Char"
---     show BoolType = "Bool"
---     show IntType = "Int"
---     show (ArrType dataType _) = "[" ++ show dataType ++ "]"
+instance Show DataType where
+    show CharType = "Char"
+    show BoolType = "Bool"
+    show IntType = "Int"
+    show (ArrType dataType _) = "[" ++ show dataType ++ "]"
 
 -- parses either a basic data type or an array
 dataType :: Parser DataType
@@ -289,14 +289,14 @@ data Value
     | Char   Char
     | Int    Integer
     | Arr    [Value]
-    deriving (Show, Eq)
+    deriving (Eq)
 
--- instance Show Value where
---     show (Bool False)   = "false"
---     show (Bool True)    = "true"
---     show (Char val)     = show val
---     show (Int val)      = show val
---     show (Arr vals)     = arrToStr vals
+instance Show Value where
+    show (Bool False)   = "false"
+    show (Bool True)    = "true"
+    show (Char val)     = show val
+    show (Int val)      = show val
+    show (Arr vals)     = arrToStr vals
 
 -- returns a string representation of an array
 arrToStr :: [Value] -> String

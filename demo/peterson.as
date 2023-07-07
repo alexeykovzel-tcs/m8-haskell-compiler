@@ -1,5 +1,5 @@
 /*
-    This file 
+    This file contains an implementation for the Peterson's algorithm.
 */
 
 global flag1: Bool = false;

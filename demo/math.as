@@ -1,5 +1,5 @@
 /* 
-    This file contains basic mathematical operations with support 
+    This file contains a basic mathematical library with support 
     for division, exponentiation, etc.
 */
 
@@ -51,3 +51,12 @@ fun pow(a: Int, b: Int) -> Int {
 fun abs(a: Int) -> Int {
     return a >= 0 ? a : -a;
 }
+
+/* --- uncomment for testing --- */
+
+// print(incr(402));       // result: 403 
+// print(div(100, 3));     // result: 33
+// print(mod(500, 30));    // result: 20
+// print(mod(500, -1));    // result: -1 (error)
+// print(pow(4, 4));       // result: 256
+// print(abs(-55));        // result: 55
