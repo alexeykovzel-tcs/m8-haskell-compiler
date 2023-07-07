@@ -39,7 +39,7 @@ runModules = do
     putStrLn "\nthe following modules are available:\n"
     
     putStrLn "fib    | fib_rec (recursive), fib_iter (iterative)"
-    putStrLn "math   | incr, div, mod, pow, abs"
+    putStrLn "math   | factorial, incr, decr, div, mod, pow, abs, gcd, lcm"
     
     putStrLn "\nfor example, here are possible commands:\n"
     

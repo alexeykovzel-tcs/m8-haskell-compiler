@@ -1,2 +1,2 @@
-let hello: String = "Hello";
+let hello: String = "hello";
 print_str(hello);

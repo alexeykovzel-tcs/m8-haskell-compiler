@@ -37,7 +37,7 @@ say_hello();  // result: "hello"
 /* ------------------------ */
 
 let arr1: Int[4] = [1, 2, 3, 4];
-let arr2: Char[3] = "foo";
+let arr2: String = "foo";
 
 print_str(arr2);  // result: "foo"
 

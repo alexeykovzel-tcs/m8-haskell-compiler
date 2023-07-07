@@ -80,6 +80,7 @@ decScope (TypeChecker errors (Context ((current, previous), scopePath) scopeVars
 -- returns an array type
 getArrayType :: DataType -> DataType
 getArrayType (ArrType dataType _) = dataType
+getArrayType StrType = CharType
 
 -- returns variables of the given scope
 getValue :: Current -> ScopeVars -> Maybe [VarData]
