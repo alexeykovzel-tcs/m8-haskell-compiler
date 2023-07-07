@@ -192,13 +192,13 @@ compileExpr ctx expr reg = case expr of
     FunCall "set_process_id" [Var name] -> putVar ctx name regSprID
  
     -- print functions
-    FunCall "print_str" [Fixed msg]   -> printStrLn ctx (show msg)
-    FunCall "print_str" [Var name]    -> printVarStr ctx name
-    FunCall "print" [expr]            -> compileExpr ctx expr reg 
-                                      ++ printReg reg 
+    FunCall "print_str" [Fixed msg]  -> printStrLn ctx (show msg)
+    FunCall "print_str" [Var name]   -> printVarStr ctx name
+    FunCall "print" [expr]           -> compileExpr ctx expr reg 
+                                        ++ printReg reg 
     -- synchronizers
-    FunCall "lock" [Var name]         -> lockMem reg $ glVarAddr ctx name
-    FunCall "unlock" [Var name]       -> unlockMem $ glVarAddr ctx name
+    FunCall "lock" [Var name]        -> lockMem reg $ glVarAddr ctx name
+    FunCall "unlock" [Var name]      -> unlockMem $ glVarAddr ctx name
 
     -- ultimate function call
     FunCall name args
