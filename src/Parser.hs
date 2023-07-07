@@ -2,7 +2,6 @@ module Parser where
 
 {- author: Aliaksei Kouzel - s2648563 -}
 
-import Test.QuickCheck as QC
 import Text.ParserCombinators.Parsec
 import Data.List (intercalate)
 import Lexer
@@ -362,3 +361,111 @@ argsDef = varDef `sepBy` comma
 -- parses arguments as expressions
 args :: Parser [Expr]
 args = expr `sepBy` comma
+
+
+-----------------------------------------------------------------------------
+-- pretty printer
+-----------------------------------------------------------------------------
+
+class PrettyPrint a where
+    pretty :: a -> String
+
+instance PrettyPrint Script where
+    pretty = unwords . map pretty
+
+instance PrettyPrint Statement where
+    pretty (VarDecl (name, dataType) expr) =
+        "let " ++ show name ++ ": " ++ pretty dataType ++ " = " ++ pretty expr ++ ";"
+    pretty (GlVarDecl (name, dataType) expr) =
+        "global " ++ show name ++ ": " ++ pretty dataType ++ " = " ++ pretty expr ++ ";"
+    pretty (VarAssign name expr) =
+        show name ++ " = " ++ pretty expr ++ ";"
+    pretty (ArrInsert name index expr) =
+        show name ++ "[" ++ show index ++ "] = " ++ pretty expr ++ ";"
+    pretty (FunDef name args retType body) =
+        "fun" ++ show name ++ "(" ++ pretty args ++ ")" ++ pretty retType ++ " {\n" ++
+        pretty body ++ "\n}"
+    pretty (ForLoop iterName iter body) =
+        "for " ++ pretty iterName ++ ": Int in " ++ pretty iter ++ " {\n" ++
+        pretty body ++ "\n}"
+    pretty (WhileLoop cond body) =
+        "while " ++ pretty cond ++ " {\n" ++
+        pretty body ++ "\n}"
+    pretty (Condition cond body1 body2) =
+        "if " ++ pretty cond ++ " {\n" ++
+        pretty body1 ++ "\n} else {\n" ++
+        pretty body2 ++ "\n}"
+    pretty (Parallel num body) =
+        "parallel " ++ show num ++ " {\n" ++
+        pretty body ++ "\n}"
+    pretty (ReturnVal expr) =
+        "return " ++ pretty expr ++ ";"
+    pretty (Action expr) =
+        pretty expr ++ ";"
+
+instance PrettyPrint (Maybe Script) where
+    pretty Nothing = ""
+    pretty (Just script) = pretty script
+
+instance PrettyPrint LoopIter where
+    pretty (IterRange from to) = pretty from ++ ".." ++ pretty to
+
+instance PrettyPrint Expr where
+    pretty (Fixed value) = show value
+    pretty (Var name) = name
+    pretty (FunCall name args) = show name ++ "(" ++ pretty args ++ ")"
+    pretty (Ternary cond expr1 expr2) = pretty cond ++ " ? " ++ pretty expr1 ++ " : " ++ pretty expr2
+    pretty (ArrAccess name index) = show name ++ "[" ++ show index ++ "]"
+    pretty (Both expr1 expr2) = prettyJoin expr1 " && " expr2
+    pretty (OneOf expr1 expr2) = prettyJoin expr1 " || " expr2
+    pretty (Eq expr1 expr2) = prettyJoin expr1 " == " expr2
+    pretty (MoreEq expr1 expr2) = prettyJoin expr1 " >= " expr2
+    pretty (LessEq expr1 expr2) = prettyJoin expr1 " <= " expr2
+    pretty (More expr1 expr2) = prettyJoin expr1 " > " expr2
+    pretty (Less expr1 expr2) = prettyJoin expr1 " < " expr2
+    pretty (Add expr1 expr2) = prettyJoin expr1 " + " expr2
+    pretty (Sub expr1 expr2) = prettyJoin expr1 " - " expr2
+    pretty (Mult expr1 expr2) = prettyJoin expr1 " * " expr2
+    pretty (Neg expr) = "-" ++ pretty expr
+
+
+    
+instance PrettyPrint Value where
+    pretty (Bool value) = show value
+    pretty (Char value) = show value
+    pretty (Int value) = show value
+    pretty (Arr value) = show value
+
+instance PrettyPrint Integer where
+    pretty = show
+
+instance PrettyPrint [Expr] where
+    pretty = unwords . map pretty
+
+instance PrettyPrint FunName where
+    pretty x = x
+
+instance PrettyPrint (Maybe DataType) where
+    pretty Nothing = ""
+    pretty (Just dataType) = pretty dataType
+
+instance PrettyPrint DataType where
+    pretty CharType = "Char"
+    pretty BoolType = "Bool"
+    pretty IntType = "Int"
+    pretty (ArrType size dataType) = "[" ++ pretty size ++ "]: " ++ pretty dataType
+
+instance PrettyPrint ArgsDef where
+    pretty = unwords . map pretty
+
+instance PrettyPrint VarDef where
+    pretty (name, dataType) = pretty name ++ ": " ++ pretty dataType
+
+instance PrettyPrint (Maybe Expr) where
+    pretty Nothing = ""
+    pretty (Just expr) = pretty expr
+
+
+prettyJoin :: PrettyPrint a => a -> String -> a -> String
+prettyJoin s1 sep s2 = pretty s1 ++ sep ++ pretty s2
+
