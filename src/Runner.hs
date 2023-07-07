@@ -1,10 +1,9 @@
 module Runner where
 
--- author: Aliaksei Kouzel - s2648563
+{- author: Aliaksei Kouzel - s2648563 -}
 
 import Sprockell
 import Compiler
-import Parser (parseWith, script)
 
 -----------------------------------------------------------------------------
 -- ASM printer
@@ -12,9 +11,9 @@ import Parser (parseWith, script)
 
 -- prints the compiled program from a file
 printFileASM :: FilePath -> IO()
-printFileASM file = do 
-    code <- readFile file
-    printASM $ compile 1 code
+printFileASM file = do
+    prog <- compileFile file 
+    printASM $ prog !! 0
 
 -- prints the compiled program
 printASM :: [Instruction] -> IO()
@@ -34,20 +33,18 @@ printInstr i instr = show i ++ ": " ++ show instr
 -- runs a program from a file
 runFile :: FilePath -> IO()
 runFile file = do
-    code <- readFile file
-    runProg code
+    prog <- compileFile file
+    run prog
 
 -- runs a program from a string
 runProg :: String -> IO()
-runProg = run . prepProg
+runProg = run . compile
 
--- parsers and compiles a program for multiple processes
-prepProg :: String -> [[Instruction]]
-prepProg code = replicate num $ prog
-    where
-        ast   = parseWith script code
-        num   = fromInteger $ countWorkers ast + 1
-        prog  = compileAST num ast
+-- runs a function from a file
+runFileFun :: FilePath -> String -> [Integer] -> IO() 
+runFileFun file name args = do
+    code <- readFile file
+    run [compileFunCall code name args]
 
 -----------------------------------------------------------------------------
 -- program debugger
@@ -63,7 +60,7 @@ debugFile file = do
 debugProg :: String -> IO()
 debugProg code = runWithDebugger 
     (debuggerSimplePrint showSharedMem) 
-    (prepProg code)
+    (compile code)
 
 -- debugger that pritns the local memory of the main process
 showLocalMem :: DbgInput -> String

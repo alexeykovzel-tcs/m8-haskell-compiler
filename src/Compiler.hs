@@ -1,12 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 
--- author: Aliaksei Kouzel - s2648563
+{- author: Aliaksei Kouzel - s2648563 -}
 
 module Compiler (
-    compile, 
-    compileFunCall,
-    compileAST,
-    countWorkers
+    compile,
+    compileFile,
+    compileFunCall
 ) where
 
 import Sprockell
@@ -17,19 +16,27 @@ import Data.Maybe
 import Data.Char (ord)
 import qualified Data.Map as Map
 
--- compiles a program from string
-compile :: Int -> String -> [Instruction]
-compile num code = compileAST num $ parseWith script code
+-- compiles a program from a string
+compile :: String -> [[Instruction]]
+compile code = replicate num $ prog
+    where
+        ast   = parseScript code
+        num   = fromInteger $ countWorkers ast + 1
+        prog  = compileAST num ast
 
--- compiles a program from string with a function call at the end
+-- compiles a program from a file
+compileFile :: FilePath -> IO [[Instruction]]
+compileFile file = compile <$> readFile file
+
+-- compiles a program from a string with a function call at the end
 compileFunCall :: String -> FunName -> [Integer] -> [Instruction]
 compileFunCall code funName args = compileAST 0 $ ast ++ [Action funCall]
     where 
-        ast      = parseWith script code
+        ast      = parseScript code
         funCall  = FunCall "print" [FunCall funName funArgs]
         funArgs  = Fixed <$> Int <$> args
 
--- compiles a script from the parser result (AST)
+-- compiles a program from the parser result (AST)
 compileAST :: Int -> Script -> [Instruction]
 compileAST num ast = startProg ++ prog ++ endProg ctx
     where
@@ -284,5 +291,5 @@ updateLcVar ctx name expr = updateLcVarAtIdx ctx name 0 expr
 skipCond :: Context -> Expr -> [Instruction] -> [Instruction] 
 skipCond ctx expr body = let (reg2, ctx2) = occupyReg ctx in
        compileExpr ctx2 expr reg2
-    ++ [Compute Equal reg2 reg0 reg2]
-    ++ branchOver reg2 body
+    ++ [Compute Equal reg2 reg0 reg2,
+        branchOver reg2 body]
