@@ -11,6 +11,7 @@ module Compiler (
 import Sprockell
 import SprockellExt
 import PreCompiler
+import Elaborator (elaborate)
 import Parser
 import Data.Maybe
 import Data.Char (ord)
@@ -20,7 +21,7 @@ import qualified Data.Map as Map
 compile :: String -> [[Instruction]]
 compile code = replicate num $ prog
     where
-        ast   = parseScript code
+        ast   = elaborate $ parseScript code
         num   = fromInteger $ countWorkers ast + 1
         prog  = compileAST num ast
 
@@ -32,7 +33,7 @@ compileFile file = compile <$> readFile file
 compileFunCall :: String -> FunName -> [Integer] -> [Instruction]
 compileFunCall code funName args = compileAST 0 $ ast ++ [Action funCall]
     where 
-        ast      = parseScript code
+        ast      = elaborate $ parseScript code
         funCall  = FunCall "print" [FunCall funName funArgs]
         funArgs  = Fixed <$> Int <$> args
 

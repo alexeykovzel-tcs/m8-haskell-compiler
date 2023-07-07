@@ -28,6 +28,6 @@ fun five() -> Int {
 
 print(x); // 7
 
-let x: Int = five();
+x = five();
 
 print(x); // 5

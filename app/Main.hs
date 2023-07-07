@@ -18,8 +18,8 @@ import System.Environment (getArgs)
        
     The following modules are available:
 
-    - fib    | fib_rec, fib_iter
-    - math   | incr, div, mod, pow, abs
+    - fib    | fib_rec (recursive), fib_iter (iterative)
+    - math   | factorial, incr, decr, div, mod, pow, abs, gcd, lcm
 
     For example, here are possible commands:
 

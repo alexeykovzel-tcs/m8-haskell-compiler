@@ -10,8 +10,8 @@ It supports the following features:
 - locks and synchronization
 - parallel execution
 - arrays and strings
-- nested functions with call-by-reference
-- soft division ("math.as" library)
+- nested functions
+- soft division (in "math.as")
 
 ## Source files: /src
 
@@ -77,15 +77,15 @@ stack run
 
 The following modules are available:
 
-| module | description                   | functions                                 |
-| ------ | ----------------------------- | ----------------------------------------- |
-| fib    | fibonacci sequence algorithms | fib_rec (recursive), fib_iter (iterative) |
-| math   | basic math library            | incr, div, mod, pow, abs                  |
+| module | description                   | functions                                           |
+| ------ | ----------------------------- | --------------------------------------------------- |
+| fib    | fibonacci sequence algorithms | fib_rec (recursive), fib_iter (iterative)           |
+| math   | basic math library            | factorial, incr, decr, div, mod, pow, abs, gcd, lcm |
 
 For example:
 
 ```haskell
-math div 100 5      -- results in 20
+math gcd 266 21     -- results in 7
 fib fib_iter 10     -- results in 55
 ```
 
