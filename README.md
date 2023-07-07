@@ -51,3 +51,13 @@ For example:
 math div 100 5      -- results in 20
 fib fib_iter 10     -- results in 55
 ```
+
+## Tests
+
+In a terminal, run:
+
+```
+stack test
+```
+
+This will run all test executables as defined in the "test" section of `package.yml`.
