@@ -58,16 +58,16 @@ stack run -- {file_path}
 
 You can try some of the already written programs in the /demo directory:
 
-| file         | description                                                                                                            |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| banking.as   | demonstrates the functionality for parallel execution and synchronization on the basis of an elementary banking system |
-| basic.as     | demonstrates the basic functionality of the compiler                                                                   |
-| fib.as       | contains algorithms for the fibonacci sequence                                                                         |
-| functions.as | demonstrates the functionality of nested functions as well as nested variables                                         |
-| math.as      | contains a basic mathematical library with support for division, exponentiation, etc                                   |
-| parallels.as | demonstrates the functionality for the nested parallel execution                                                       |
-| peterson.as  | contains an implementation for the Peterson' algorithm                                                                 |
-| scopes.as    | demonstrates a fairly complex example of nested scoping with variables having the same name but in different scopes    |
+| file         | description                                                                 |
+| ------------ | --------------------------------------------------------------------------- |
+| banking.as   | An elementary banking system, consisting of several processes               |
+| basic.as     | demonstrates the basic functionality of the compiler                        |
+| fib.as       | algorithms for the fibonacci sequence                                       |
+| functions.as | an example of nested functions as well as nested variables                  |
+| math.as      | a basic mathematical library with support for division, exponentiation, etc |
+| parallels.as | an example of the nested parallel execution                                 |
+| peterson.as  | an implementation for the Peterson' algorithm                               |
+| scopes.as    | a fairly complex example of nested scoping with variables                   |
 
 To try specific functions from the prebuilt modules in /demo, use:
 
